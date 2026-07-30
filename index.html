@@ -580,46 +580,6 @@ html.strip-theme .roi-model-card { background: rgba(245, 239, 227, 0.92); }
 
 /* Sidebar Toggle Functionality */
 html.sidebar-hidden .sidebar { margin-left: -220px; }
-.sidebar-toggle {
-  position: absolute;
-  top: 24px;
-  right: -16px;
-  width: 32px;
-  height: 32px;
-  background: var(--bg-card);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border-lit);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--cyan);
-  cursor: pointer;
-  z-index: 100;
-  box-shadow: var(--glass-shadow);
-  transition: all var(--transition);
-}
-.sidebar-toggle:hover {
-  background: var(--cyan-glow);
-  border-color: var(--cyan);
-  transform: scale(1.1);
-}
-.sidebar-toggle i {
-  transition: transform var(--transition);
-  font-size: 14px;
-}
-html.sidebar-hidden .sidebar-toggle {
-  right: -48px;
-  background: var(--bg-panel);
-}
-html.sidebar-hidden .sidebar-toggle:hover {
-  background: var(--bg-hover);
-}
-html.sidebar-hidden .sidebar-toggle i {
-  transform: rotate(180deg);
-}
-
 /* 任务3：侧边栏"仅图标"收起模式（桌面端手动触发，非完全隐藏） */
 html.sidebar-collapsed .sidebar { width: 64px; }
 html.sidebar-collapsed .nav-item span,
@@ -631,9 +591,6 @@ html.sidebar-collapsed #account-email-display { display: none; }
 html.sidebar-collapsed .sidebar-logo { justify-content: center; }
 html.sidebar-collapsed .sidebar-header { padding-left: 0; padding-right: 0; }
 html.sidebar-collapsed .nav-item { justify-content: center; padding: 12px; }
-html.sidebar-collapsed .sidebar-toggle i {
-  transform: rotate(180deg);
-}
 /* 折叠态下仅保留设置齿轮，云同步状态与退出登录收进设置面板 */
 html.sidebar-collapsed #cloud-sync-indicator,
 html.sidebar-collapsed .sidebar-footer .footer-logout-btn { display: none; }
@@ -1343,7 +1300,6 @@ html.strip-theme .toast-undo-btn { background: rgba(120,100,70,0.08); }
 @media (max-width: 700px) { 
   .sidebar { width: 64px; } 
   html.sidebar-hidden .sidebar { margin-left: -64px; }
-  html.sidebar-hidden .sidebar-toggle { right: -40px; }
   .nav-item span, .logo-text, .logo-sub, .sidebar-footer .footer-version, .fleet-count-badge { display: none; } 
   .sidebar-logo { justify-content: center; } 
   .nav-item { justify-content: center; padding: 12px; } 
@@ -1451,10 +1407,6 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 
 <div class="app">
   <aside class="sidebar" id="app-sidebar">
-    <button class="sidebar-toggle" onclick="toggleSidebar()" title="隐藏/显示侧边栏">
-      <i class="fa-solid fa-chevron-left"></i>
-    </button>
-    
     <div class="sidebar-header">
       <div class="sidebar-logo"><div class="logo-icon"><i class="fa-solid fa-plane-up"></i></div><div><div class="logo-text">WoA Fleet</div><div class="logo-sub">Command Center</div></div></div>
       <div id="account-email-display" style="font-size:10.5px; color:var(--text3); font-family:var(--mono); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" data-tooltip="当前登录账号"></div>
