@@ -46,47 +46,56 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg-deep:    #07060d;
-  --bg-panel:   rgba(15, 13, 26, 0.88);
-  --bg-card:    rgba(24, 19, 41, 0.55);
-  --bg-hover:   rgba(38, 30, 61, 0.35);
-  --bg-input:   rgba(22, 18, 36, 0.6);
+  /* Deep Space Aurora Dashboard —— 深空极光玻璃拟态 */
+  --bg-deep:    #0a0e1a;
+  --bg-panel:   rgba(10, 11, 20, 0.82);
+  --bg-card:    rgba(255, 255, 255, 0.04);
+  --bg-hover:   rgba(255, 255, 255, 0.07);
+  --bg-input:   rgba(255, 255, 255, 0.05);
   
-  --glass-blur: 18px;
+  --glass-blur: 20px;
   --glass-border: rgba(255, 255, 255, 0.09);
   --glass-border-lit: rgba(255, 255, 255, 0.18);
-  --glass-shadow: 0 12px 40px 0 rgba(6, 2, 20, 0.45);
-  --glass-highlight: inset 0 1px 1px rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 12px 40px 0 rgba(4, 2, 14, 0.5);
+  --glass-highlight: inset 0 1px 1px rgba(255, 255, 255, 0.07);
   
   --border:     rgba(255,255,255,0.08);
-  --border-lit: rgba(255,255,255,0.16);
+  --border-lit: rgba(255,255,255,0.18);
   
-  --text1: #f1eefb;
-  --text2: #a29cc2;
-  --text3: #6a6488;
+  --text1: #f5f5fa;
+  --text2: #8b8aa3;
+  --text3: #5c5a73;
 
-  --amber:      #f5a623;
-  --amber-dim:  #b87918;
-  --amber-glow: rgba(245,166,35,0.15);
-  --cyan:       #a78bfa;
-  --cyan-dim:   #7c5cfc;
-  --cyan-glow:  rgba(167,139,250,0.16);
-  --green:      #39d98a;
-  --green-glow: rgba(57,217,138,0.12);
-  --red:        #ff5c5c;
-  --red-glow:   rgba(255,92,92,0.12);
+  --amber:      #f5c15c;
+  --amber-dim:  #c99a3e;
+  --amber-glow: rgba(245,193,92,0.15);
+  --cyan:       #8b5cf6;
+  --cyan-dim:   #7c3aed;
+  --cyan-glow:  rgba(139,92,246,0.16);
+  --green:      #34d399;
+  --green-glow: rgba(52,211,153,0.12);
+  --red:        #fb7185;
+  --red-glow:   rgba(251,113,133,0.12);
   
-  --purple:     #c4a6ff;
-  --purple-glow:rgba(196,166,255,0.18);
-  --gold:       #ffd700;
-  --gold-glow:  rgba(255,215,0,0.15);
+  --purple:     #b8a1fb;
+  --purple-glow:rgba(184,161,251,0.18);
+  --gold:       #f5c15c;
+  --gold-glow:  rgba(245,193,92,0.15);
+
+  /* 极光渐变：紫→蓝（主）、粉→紫（辅） */
+  --blue:       #38bdf8;
+  --blue-glow:  rgba(56,189,248,0.16);
+  --pink:       #ec4899;
+  --pink-glow:  rgba(236,72,153,0.16);
+  --grad-primary:   linear-gradient(135deg, #8b5cf6, #38bdf8);
+  --grad-secondary: linear-gradient(135deg, #ec4899, #b8a1fb);
 
   --mono: 'Inter Tight', 'LXGW WenKai TC', monospace;
   --sans: 'DM Sans', 'LXGW WenKai TC', sans-serif;
-  --r-sm: 10px;
-  --r-md: 18px; 
-  --r-lg: 26px;
-  --transition: 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  --r-sm: 12px;
+  --r-md: 20px; 
+  --r-lg: 24px;
+  --transition: 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 html.light-theme {
@@ -169,13 +178,11 @@ body {
 body::before {
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background-image: 
-    radial-gradient(circle at 6% 10%, rgba(167, 139, 250, 0.18), transparent 42%),
-    radial-gradient(circle at 94% 88%, rgba(124, 92, 252, 0.11), transparent 46%),
-    radial-gradient(circle at 60% 105%, rgba(245, 166, 35, 0.04), transparent 50%),
-    radial-gradient(var(--cyan-glow) 1px, transparent 1px), 
-    radial-gradient(var(--cyan-glow) 1px, transparent 1px);
-  background-position: 0 0, 0 0, 0 0, 0 0, 25px 25px; 
-  background-size: 100% 100%, 100% 100%, 100% 100%, 50px 50px, 50px 50px; 
+    radial-gradient(circle at 8% 8%, rgba(139, 92, 246, 0.14), transparent 44%),
+    radial-gradient(circle at 94% 90%, rgba(56, 189, 248, 0.11), transparent 48%),
+    radial-gradient(circle at 55% 100%, rgba(236, 72, 153, 0.05), transparent 55%);
+  background-position: 0 0, 0 0, 0 0; 
+  background-size: 100% 100%, 100% 100%, 100% 100%; 
   opacity: 1;
 }
 html.light-theme body::before {
@@ -291,8 +298,8 @@ html.has-topbar .app { padding-top: 52px; }
   display: flex; align-items: center; justify-content: center;
   background: var(--bg-deep);
   background-image:
-    radial-gradient(circle at 10% 20%, rgba(167, 139, 250, 0.10), transparent 40%),
-    radial-gradient(circle at 90% 80%, rgba(245, 166, 35, 0.07), transparent 40%);
+    radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.12), transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(56, 189, 248, 0.09), transparent 42%);
 }
 #auth-overlay.hidden { display: none; }
 .auth-card {
@@ -628,7 +635,7 @@ html:not(.light-theme) .stat-value { text-shadow: 0 0 15px rgba(255,255,255,0.05
 .filter-bar input:focus, .filter-bar select:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan-glow); background: var(--bg-hover); }
 .filter-bar select option { background: var(--bg-deep); color: var(--text1); }
 
-.bulk-bar { display: none; align-items: center; justify-content: space-between; background: rgba(245,166,35,0.1); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border: 1px solid rgba(245,166,35,0.3); border-radius: var(--r-md); padding: 10px 16px; margin-bottom: 16px; animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; box-shadow: var(--glass-shadow); }
+.bulk-bar { display: none; align-items: center; justify-content: space-between; background: rgba(245, 193, 92,0.1); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border: 1px solid rgba(245, 193, 92,0.3); border-radius: var(--r-md); padding: 10px 16px; margin-bottom: 16px; animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; box-shadow: var(--glass-shadow); }
 @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 .bulk-bar span { font-size: 13px; font-weight: 500; color: var(--amber); }
 input[type="checkbox"] { accent-color: var(--amber); width: 14px; height: 14px; cursor: pointer; }
@@ -687,8 +694,8 @@ input[type="checkbox"] { accent-color: var(--amber); width: 14px; height: 14px; 
   gap: 4px; 
   font-family: var(--mono); 
 }
-.iba-badge.pos { background: rgba(57, 217, 138, 0.15); color: var(--green); }
-.iba-badge.neg { background: rgba(245, 166, 35, 0.15); color: var(--amber); } /* 图2中下降呈现黄色 */
+.iba-badge.pos { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+.iba-badge.neg { background: rgba(245, 193, 92, 0.15); color: var(--amber); } /* 图2中下降呈现黄色 */
 .iba-badge.neu { background: var(--bg-input); color: var(--text3); }
 .iba-spark-wrap { 
   width: 100%; 
@@ -797,7 +804,7 @@ html.strip-theme .coin-card.silver .coin-card-icon { color: #6b5d47; background:
 .country-rank-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: var(--r-sm); background: var(--bg-hover); border: 1px solid transparent; transition: border-color 0.2s; }
 .country-rank-row:hover { border-color: var(--glass-border-lit); }
 .rank-num { width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 600; font-size: 12px; background: var(--bg-input); color: var(--text2); border: 1px solid var(--border); }
-.rank-num.top1 { background: var(--gold-glow); color: var(--gold); border-color: rgba(255,215,0,0.35); }
+.rank-num.top1 { background: var(--gold-glow); color: var(--gold); border-color: rgba(245,193,92,0.35); }
 .rank-num.top2 { background: rgba(200,210,224,0.12); color: #cdd3de; border-color: rgba(200,210,224,0.3); }
 .rank-num.top3 { background: rgba(205,127,50,0.15); color: #cd7f32; border-color: rgba(205,127,50,0.35); }
 .country-name-cell { flex: 1; min-width: 0; display: flex; align-items: center; font-size: 13px; color: var(--text1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -843,7 +850,7 @@ html.strip-theme .coin-card.silver .coin-card-icon { color: #6b5d47; background:
 .country-tab.active {
   color: var(--cyan);
   background: var(--cyan-glow);
-  border: 1px solid rgba(167,139,250,0.3);
+  border: 1px solid rgba(139, 92, 246,0.3);
   box-shadow: inset 0 1px 2px rgba(255,255,255,0.1);
 }
 
@@ -883,9 +890,9 @@ html.strip-theme .coin-card.silver .coin-card-icon { color: #6b5d47; background:
 .cpm-row input[type="date"]:focus, .cpm-row select:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan-glow); }
 .cpm-row select option { background: var(--bg-deep); color: var(--text1); }
 .cpm-hint { font-size: 11px; color: var(--text3); }
-.btn-danger-ghost { background: var(--bg-input); color: var(--red); border: 1px solid rgba(255,92,92,0.3); }
+.btn-danger-ghost { background: var(--bg-input); color: var(--red); border: 1px solid rgba(251, 113, 133,0.3); }
 .btn-danger-ghost:hover { background: var(--red-glow); border-color: var(--red); }
-.country-viewing-banner { display: flex; align-items: center; gap: 8px; background: var(--amber-glow); border: 1px solid rgba(245,166,35,0.35); color: var(--amber); font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: var(--r-sm); }
+.country-viewing-banner { display: flex; align-items: center; gap: 8px; background: var(--amber-glow); border: 1px solid rgba(245, 193, 92,0.35); color: var(--amber); font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: var(--r-sm); }
 
 /* ── Sparkline & expandable rows ── */
 .country-spark-cell { flex-shrink: 0; width: 68px; display: flex; align-items: center; justify-content: center; opacity: 0.9; }
@@ -917,9 +924,9 @@ html.strip-theme .coin-card.silver .coin-card-icon { color: #6b5d47; background:
 .bar-lbl { width: 72px; text-align: right; font-family: var(--mono); font-size: 11px; color: var(--text2); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-track { flex: 1; height: 18px; background: var(--bg-input); border-radius: 4px; overflow: hidden; position: relative; border: 1px solid var(--border); }
 .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(.4,0,.2,1); position: relative; }
-.bar-fill.amber { background: linear-gradient(90deg, rgba(245,166,35,0.4), var(--amber)); }
-.bar-fill.cyan  { background: linear-gradient(90deg, rgba(167,139,250,0.4), var(--cyan)); box-shadow: inset -2px 0 4px rgba(255,255,255,0.2); }
-.bar-fill.green { background: linear-gradient(90deg, rgba(57,217,138,0.4), var(--green)); }
+.bar-fill.amber { background: linear-gradient(90deg, rgba(245, 193, 92,0.4), var(--amber)); }
+.bar-fill.cyan  { background: linear-gradient(90deg, rgba(139, 92, 246,0.4), var(--cyan)); box-shadow: inset -2px 0 4px rgba(255,255,255,0.2); }
+.bar-fill.green { background: linear-gradient(90deg, rgba(52, 211, 153,0.4), var(--green)); }
 .bar-num { width: 32px; font-family: var(--mono); font-size: 11px; color: var(--text1); font-weight: 600; text-align: right; }
 .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .breakdown-card { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); box-shadow: var(--glass-shadow); }
@@ -992,15 +999,15 @@ html.strip-theme #settings-panel { background: #ede4d3; }
 .toggle-switch.on { background: var(--green-glow); border-color: var(--green); }
 .toggle-switch.on::after { transform: translateX(16px); background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
 
-.reg-badge { font-family: var(--mono); font-size: 12px; font-weight: 600; background: var(--amber-glow); border: 1px solid rgba(245,166,35,0.3); color: var(--amber); padding: 4px 8px; border-radius: 6px; display: inline-block; letter-spacing: 0.05em; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
-.reg-badge:hover { transform: scale(1.05); box-shadow: 0 0 12px rgba(245,166,35,0.3); border-color: var(--amber); }
+.reg-badge { font-family: var(--mono); font-size: 12px; font-weight: 600; background: var(--amber-glow); border: 1px solid rgba(245, 193, 92,0.3); color: var(--amber); padding: 4px 8px; border-radius: 6px; display: inline-block; letter-spacing: 0.05em; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
+.reg-badge:hover { transform: scale(1.05); box-shadow: 0 0 12px rgba(245, 193, 92,0.3); border-color: var(--amber); }
 .type-pill { font-size: 10px; font-weight: 600; padding: 4px 8px; border-radius: 20px; display: inline-block; letter-spacing: 0.05em; text-transform: uppercase; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-.type-pax   { background: var(--cyan-glow); color: var(--cyan);  border: 1px solid rgba(167,139,250,0.3); }
-.type-cargo { background: var(--amber-glow); color: var(--amber); border: 1px solid rgba(245,166,35,0.3); }
+.type-pax   { background: var(--cyan-glow); color: var(--cyan);  border: 1px solid rgba(139, 92, 246,0.3); }
+.type-cargo { background: var(--amber-glow); color: var(--amber); border: 1px solid rgba(245, 193, 92,0.3); }
 .size-chip { font-family: var(--mono); font-size: 11px; font-weight: 600; background: var(--bg-input); color: var(--text1); padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); }
 .diff-badge { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 3px 6px; border-radius: 4px; display: inline-block; }
-.diff-pos { background: var(--green-glow); color: var(--green); border: 1px solid rgba(57,217,138,0.3); }
-.diff-neg { background: var(--red-glow); color: var(--red); border: 1px solid rgba(255,92,92,0.3); }
+.diff-pos { background: var(--green-glow); color: var(--green); border: 1px solid rgba(52, 211, 153,0.3); }
+.diff-neg { background: var(--red-glow); color: var(--red); border: 1px solid rgba(251, 113, 133,0.3); }
 .diff-neu { background: var(--bg-input); color: var(--text3); border: 1px solid var(--border); }
 
 /* Rating System Badges */
@@ -1037,18 +1044,18 @@ html.strip-theme #settings-panel { background: #ede4d3; }
 }
 
 /* 针对不同等级的炫酷配色 */
-.rating-s { background: linear-gradient(135deg, #ffd700, #b8860b); color: #fff; text-shadow: 0 0 5px rgba(0,0,0,0.5); border-color: rgba(255,215,0,0.5); box-shadow: 0 0 15px rgba(218,165,32,0.4); }
+.rating-s { background: linear-gradient(135deg, #f5c15c, #c99a3e); color: #fff; text-shadow: 0 0 5px rgba(0,0,0,0.5); border-color: rgba(245,193,92,0.5); box-shadow: 0 0 15px rgba(245,193,92,0.4); }
 .rating-a { background: linear-gradient(135deg, #b388ff, #7c3aed); color: #fff; border-color: rgba(179,136,255,0.5); }
-.rating-b { background: linear-gradient(135deg, #a78bfa, #7c5cfc); color: #fff; border-color: rgba(167,139,250,0.5); }
-.rating-c { background: linear-gradient(135deg, #39d98a, #059669); color: #fff; }
+.rating-b { background: linear-gradient(135deg, #8b5cf6, #38bdf8); color: #fff; border-color: rgba(139, 92, 246,0.5); }
+.rating-c { background: linear-gradient(135deg, #34d399, #059669); color: #fff; }
 .rating-d { background: linear-gradient(135deg, #4a5568, #2d3748); color: #a0aec0; }
 
 /* ── Airport Link + Hub Tag ── */
 .airport-link { cursor: pointer; transition: color 0.15s; border-radius: 3px; }
 .airport-link:hover { color: var(--cyan) !important; text-decoration: underline dotted; text-underline-offset: 3px; }
 .hub-tag { display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:700; padding:2px 7px; border-radius:20px; font-family:var(--mono); letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
-.hub-mega  { background: var(--gold-glow); color: var(--gold); border:1px solid rgba(255,215,0,0.4); }
-.hub-focus { background: var(--cyan-glow); color: var(--cyan); border:1px solid rgba(167,139,250,0.3); }
+.hub-mega  { background: var(--gold-glow); color: var(--gold); border:1px solid rgba(245,193,92,0.4); }
+.hub-focus { background: var(--cyan-glow); color: var(--cyan); border:1px solid rgba(139, 92, 246,0.3); }
 .hub-spoke { background: var(--bg-input); color: var(--text2); border:1px solid var(--border); }
 
 /* ── Airport Info Popup ── */
@@ -1100,7 +1107,7 @@ html.strip-theme #settings-panel { background: #ede4d3; }
 /* Form */
 .form-section { background: var(--bg-card); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border: 1px solid var(--glass-border); border-radius: var(--r-lg); padding: 14px 18px; margin-bottom: 12px; box-shadow: var(--glass-shadow), var(--glass-highlight); transition: background-color var(--transition); }
 .form-section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border); }
-.form-section-icon { width: 28px; height: 28px; background: var(--cyan-glow); border: 1px solid rgba(167,139,250,0.3); border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; color: var(--cyan); font-size: 13px; box-shadow: inset 0 1px 2px rgba(255,255,255,0.1); flex-shrink: 0; }
+.form-section-icon { width: 28px; height: 28px; background: var(--cyan-glow); border: 1px solid rgba(139, 92, 246,0.3); border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; color: var(--cyan); font-size: 13px; box-shadow: inset 0 1px 2px rgba(255,255,255,0.1); flex-shrink: 0; }
 .form-section-title { font-size: 13px; font-weight: 600; color: var(--text1); }
 .form-section-sub   { font-size: 10px; color: var(--text3); margin-top: 1px; }
 .form-grid { display: grid; gap: 10px; }
@@ -1121,7 +1128,7 @@ html.strip-theme .form-group input, html.strip-theme .form-group select { color-
 .form-group input:disabled, .form-group select:disabled { background: transparent; color: var(--text3); cursor: not-allowed; border-style: dashed; opacity: 0.5; }
 .form-hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
 .form-hint.cargo-lock { color: var(--amber); }
-.autofill-highlight { border-color: rgba(167,139,250,0.4) !important; background: var(--cyan-glow) !important; color: var(--cyan) !important; font-family: var(--mono) !important; }
+.autofill-highlight { border-color: rgba(139, 92, 246,0.4) !important; background: var(--cyan-glow) !important; color: var(--cyan) !important; font-family: var(--mono) !important; }
 .city-subtitle { font-size: 11px; margin-top: 2px; min-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--cyan); display: flex; align-items: center; }
 
 /* Lock Icon Extension */
@@ -1139,7 +1146,7 @@ html.light-theme .btn-primary { color: #fff; }
 .reg-dup-hint { display: none; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--amber); }
 .reg-dup-hint.show { display: flex; }
 .reg-dup-hint i { font-size: 11px; }
-.btn-danger { background: rgba(255,92,92,0.1); color: var(--red); border-color: rgba(255,92,92,0.3); padding: 8px 14px; font-size: 12px; }
+.btn-danger { background: rgba(251, 113, 133,0.1); color: var(--red); border-color: rgba(251, 113, 133,0.3); padding: 8px 14px; font-size: 12px; }
 .btn-danger:hover { background: var(--red-glow); border-color: var(--red); box-shadow: 0 4px 10px var(--red-glow); }
 .btn-icon { padding: 8px 12px; }
 .form-actions { display: flex; justify-content: flex-end; gap: 14px; margin-top: 14px; }
@@ -1149,11 +1156,11 @@ html.light-theme .btn-primary { color: #fff; }
 .timeline-period { position: relative; margin-bottom: 30px; }
 .timeline-period::before { content: ''; position: absolute; left: -31px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--cyan); border: 3px solid var(--bg-deep); box-shadow: 0 0 10px var(--cyan-glow); }
 .timeline-date { font-size: 15px; font-weight: 600; color: var(--text1); font-family: var(--mono); margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
-.timeline-date span { font-size: 11px; background: var(--cyan-glow); color: var(--cyan); padding: 3px 8px; border-radius: 12px; font-weight: 600; border: 1px solid rgba(167,139,250,0.3); font-family: var(--sans); }
+.timeline-date span { font-size: 11px; background: var(--cyan-glow); color: var(--cyan); padding: 3px 8px; border-radius: 12px; font-weight: 600; border: 1px solid rgba(139, 92, 246,0.3); font-family: var(--sans); }
 .timeline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .tl-ac-card { background: var(--bg-input); border: 1px solid var(--border); padding: 12px 14px; border-radius: var(--r-md); display: flex; align-items: center; gap: 12px; transition: all var(--transition); user-select: none; }
 .tl-ac-card:hover { border-color: var(--cyan); background: var(--bg-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-.tl-ac-icon { width: 34px; height: 34px; border-radius: var(--r-sm); background: var(--cyan-glow); display: flex; align-items: center; justify-content: center; color: var(--cyan); font-size: 14px; border: 1px solid rgba(167,139,250,0.2); }
+.tl-ac-icon { width: 34px; height: 34px; border-radius: var(--r-sm); background: var(--cyan-glow); display: flex; align-items: center; justify-content: center; color: var(--cyan); font-size: 14px; border: 1px solid rgba(139, 92, 246,0.2); }
 .tl-ac-info { flex: 1; }
 .tl-ac-reg { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text1); display: flex; align-items: center; gap: 6px; }
 .tl-ac-type { font-size: 11px; color: var(--text3); margin-top: 4px; }
@@ -1211,7 +1218,7 @@ html.light-theme .btn-primary { color: #fff; }
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     backdrop-filter: blur(8px);
 }
-.popup-close-float:hover { background: rgba(255,92,92,0.8); color: white; border-color: #ff5c5c; }
+.popup-close-float:hover { background: rgba(251, 113, 133,0.8); color: white; border-color: #fb7185; }
 .popup-main-content { flex: 1; display: flex; flex-direction: column; position: relative; min-height: 0; }
 .popup-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 24px 32px; border-bottom: 1px solid var(--glass-border); background: rgba(0,0,0,0.1); flex-shrink: 0;}
 html.light-theme .popup-header { background: rgba(0,0,0,0.03); }
@@ -1353,7 +1360,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 
 .flightaware-track { stroke-dasharray: 8 10; animation: track-flow 1s linear infinite; }
 @keyframes track-flow { to { stroke-dashoffset: -18; } }
-.hover-map-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); color: var(--green); font-family: var(--mono); font-size: 10px; padding: 4px 8px; border-radius: 4px; z-index: 400; border: 1px solid rgba(57,217,138,0.3); backdrop-filter: blur(4px); }
+.hover-map-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); color: var(--green); font-family: var(--mono); font-size: 10px; padding: 4px 8px; border-radius: 4px; z-index: 400; border: 1px solid rgba(52, 211, 153,0.3); backdrop-filter: blur(4px); }
 </style>
 </head>
 <body>
@@ -1483,7 +1490,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
             <div style="border-top:1px solid var(--border); padding-top:10px; display:flex; flex-direction:column; gap:8px;">
                 <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" style="width:100%; justify-content:flex-start; font-size:12px; padding:8px 10px;"><i class="fa-solid fa-file-import"></i>&nbsp; 导入合并数据</button>
                 <button class="btn btn-ghost" onclick="exportData()" style="width:100%; justify-content:flex-start; font-size:12px; padding:8px 10px;"><i class="fa-solid fa-file-export"></i>&nbsp; 导出存档</button>
-                <button class="btn btn-ghost" onclick="authSignOut()" style="width:100%; justify-content:flex-start; font-size:12px; padding:8px 10px; color:var(--red); border-color:rgba(255,92,92,0.3);"><i class="fa-solid fa-right-from-bracket"></i>&nbsp; 退出登录</button>
+                <button class="btn btn-ghost" onclick="authSignOut()" style="width:100%; justify-content:flex-start; font-size:12px; padding:8px 10px; color:var(--red); border-color:rgba(251, 113, 133,0.3);"><i class="fa-solid fa-right-from-bracket"></i>&nbsp; 退出登录</button>
             </div>
         </div>
       </div>
@@ -1931,7 +1938,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
                 </div>
 
                 <!-- 极速更新总距离：跳过"查找+编辑"流程，按注册号直接改，支持 OCR 批量识别 -->
-                <button class="btn" onclick="openQuickDistModal()" title="按注册号直接更新累计总距离 (快捷键 Q)" style="padding:0 14px; height:100%; background:rgba(167,139,250,0.1); border:1px solid var(--cyan-dim); color:var(--cyan); font-weight:600; white-space:nowrap;">
+                <button class="btn" onclick="openQuickDistModal()" title="按注册号直接更新累计总距离 (快捷键 Q)" style="padding:0 14px; height:100%; background:rgba(139, 92, 246,0.1); border:1px solid var(--cyan-dim); color:var(--cyan); font-weight:600; white-space:nowrap;">
                     <i class="fa-solid fa-bolt"></i> 极速改距离
                 </button>
             </div>
@@ -2065,9 +2072,9 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
             </div>
           </div>
 
-          <div class="form-section" style="border-color: rgba(167,139,250,0.3); background: var(--cyan-glow);">
+          <div class="form-section" style="border-color: rgba(139, 92, 246,0.3); background: var(--cyan-glow);">
             <div class="form-section-header">
-              <div class="form-section-icon" style="background:var(--cyan-glow); color:var(--cyan); border-color:rgba(167,139,250,0.4)"><i class="fa-solid fa-map-location-dot"></i></div>
+              <div class="form-section-icon" style="background:var(--cyan-glow); color:var(--cyan); border-color:rgba(139, 92, 246,0.4)"><i class="fa-solid fa-map-location-dot"></i></div>
               <div>
                 <div class="form-section-title">执飞与座舱</div>
                 <div class="form-section-sub">常飞航线、耗时、座舱排布及收益预测设定</div>
@@ -2673,7 +2680,7 @@ function showHoverMap(e, baseCode, destCode) {
     
     // 背景阴影和虚线流光动画
     L.polyline(trackPoints, { color: '#000', weight: 4, opacity: 0.4 }).addTo(hoverRouteLayer);
-    L.polyline(trackPoints, { color: '#39d98a', weight: 2, opacity: 1, className: 'flightaware-track' }).addTo(hoverRouteLayer);
+    L.polyline(trackPoints, { color: '#34d399', weight: 2, opacity: 1, className: 'flightaware-track' }).addTo(hoverRouteLayer);
     
     // 基地原点
     const baseIcon = L.divIcon({ html: '<div style="width:8px;height:8px;background:var(--cyan);border-radius:50%;box-shadow:0 0 5px var(--cyan);"></div>', className: 'custom-icon', iconSize: [8, 8], iconAnchor: [4, 4] });
@@ -4681,7 +4688,7 @@ function renderMap() {
 
             if (!drawnRoutes.has(routeKey) && !drawnRoutes.has(reverseKey)) {
                 L.polyline([[bInfo.lat, startLon], [dInfo.lat, endLon]], {
-                    color: '#a78bfa',
+                    color: '#8b5cf6',
                     weight: 2,
                     opacity: 0.5,
                     dashArray: '4, 6'
@@ -4719,7 +4726,7 @@ function renderMap() {
         marker.bindPopup(
             `<b>${code}</b> ${tierLabel}<br/>${info.name}<br/>${info.country} ${getFlagImg(info)}<br/>
              <div style="margin-top:6px; font-size:12px;">作为基地 <b>${stat.asBase}</b> 次 · 作为目的地 <b>${stat.asDest}</b> 次</div>
-             <button onclick="openAirportInfo('${code}')" style="margin-top:8px; width:100%; padding:6px; border:none; border-radius:6px; background:#a78bfa; color:#08131a; font-weight:600; cursor:pointer;">查看完整详情</button>`
+             <button onclick="openAirportInfo('${code}')" style="margin-top:8px; width:100%; padding:6px; border:none; border-radius:6px; background:#8b5cf6; color:#08131a; font-weight:600; cursor:pointer;">查看完整详情</button>`
         );
     });
 }
@@ -5022,13 +5029,13 @@ function renderAnalytics() {
           label: 'ROI', data: topRoi.map(d => d.roi.toFixed(2)),
           backgroundColor: (context) => {
             const chart = context.chart; const {ctx, chartArea} = chart;
-            if (!chartArea) return isLight ? 'rgba(124, 58, 237, 0.4)' : 'rgba(167, 139, 250, 0.4)'; 
+            if (!chartArea) return isLight ? 'rgba(124, 58, 237, 0.4)' : 'rgba(139, 92, 246, 0.4)'; 
             const gradient = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
             if (isLight) { gradient.addColorStop(0, 'rgba(124, 58, 237, 0.1)'); gradient.addColorStop(1, 'rgba(124, 58, 237, 0.8)'); } 
-            else { gradient.addColorStop(0, 'rgba(167, 139, 250, 0.1)'); gradient.addColorStop(1, 'rgba(167, 139, 250, 0.8)'); }
+            else { gradient.addColorStop(0, 'rgba(139, 92, 246, 0.1)'); gradient.addColorStop(1, 'rgba(139, 92, 246, 0.8)'); }
             return gradient;
           },
-          borderColor: isLight ? '#7c3aed' : '#a78bfa', borderWidth: 1, borderRadius: 4
+          borderColor: isLight ? '#7c3aed' : '#8b5cf6', borderWidth: 1, borderRadius: 8
         }]
       },
       options: {
@@ -5040,7 +5047,7 @@ function renderAnalytics() {
         plugins: { 
             legend: { display: false },
             tooltip: {
-                backgroundColor: tooltipBg, titleColor: tooltipColor, bodyColor: isLight ? '#6d28d9' : '#7c5cfc', borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(167,139,250,0.2)', borderWidth: 1,
+                backgroundColor: tooltipBg, titleColor: tooltipColor, bodyColor: isLight ? '#6d28d9' : '#38bdf8', borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(139, 92, 246,0.2)', borderWidth: 1,
                 callbacks: { label: function(context) { return `单趟收益率: ${topRoi[context.dataIndex].roi.toFixed(2)}%`; }, afterLabel: function(context) { return `平均净利: ${Math.round(topRoi[context.dataIndex].avgP).toLocaleString()} W\n机型造价: ${topRoi[context.dataIndex].price.toLocaleString()} W`; } }
             }
         }
@@ -5096,7 +5103,7 @@ function renderProfitCurve() {
       }
   });
 
-  const colors = isLight ? ['#7c3aed', '#d97706', '#059669', '#dc2626', '#6b21a8', '#ca8a04', '#be185d', '#0f766e'] : ['#a78bfa', '#f5a623', '#39d98a', '#ff5c5c', '#b388ff', '#ffff00', '#ff4081', '#00e676'];
+  const colors = isLight ? ['#7c3aed', '#d97706', '#059669', '#dc2626', '#6b21a8', '#ca8a04', '#be185d', '#0f766e'] : ['#8b5cf6', '#38bdf8', '#ec4899', '#f5c15c', '#34d399', '#fb7185', '#b8a1fb', '#22d3ee'];
   const datasets = []; let colorIndex = 0;
   for (const icao in groupedData) {
       groupedData[icao].sort((a, b) => a.x - b.x); groupedData[icao].unshift({ x: 0, y: 0, label: icao + ' (Start)' });
@@ -5115,7 +5122,7 @@ function renderProfitCurve() {
         }, 
         plugins: { 
             legend: { display: true, position: 'top', labels: { color: isLight ? '#1a202c' : '#edf0f5', usePointStyle: true } },
-            tooltip: { backgroundColor: tooltipBg, titleColor: tooltipColor, bodyColor: isLight ? '#7c3aed' : '#a78bfa', borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(167,139,250,0.2)', borderWidth: 1, callbacks: { label: function(context) { if(context.raw.x === 0 && context.raw.y === 0) return `${context.dataset.label} : 0 W @ 起点`; return `${context.raw.label} : ${context.raw.y.toLocaleString()} W @ ${context.raw.x} nm`; } } }
+            tooltip: { backgroundColor: tooltipBg, titleColor: tooltipColor, bodyColor: isLight ? '#7c3aed' : '#8b5cf6', borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(139, 92, 246,0.2)', borderWidth: 1, callbacks: { label: function(context) { if(context.raw.x === 0 && context.raw.y === 0) return `${context.dataset.label} : 0 W @ 起点`; return `${context.raw.label} : ${context.raw.y.toLocaleString()} W @ ${context.raw.x} nm`; } } }
         } 
     },
     plugins: [{ id: 'tailLabelPlugin', afterDraw: (chart) => { const ctx = chart.ctx; ctx.font = 'bold 11px "Inter Tight", monospace'; ctx.textBaseline = 'middle'; chart.data.datasets.forEach((dataset, i) => { const meta = chart.getDatasetMeta(i); if (!meta.hidden && meta.data.length > 0) { const lastPoint = meta.data[meta.data.length - 1]; const { x, y } = lastPoint.getProps(['x', 'y']); ctx.fillStyle = dataset.borderColor; ctx.textAlign = 'left'; ctx.fillText(dataset.label, x + 6, y); } }); } }]
@@ -5223,7 +5230,7 @@ function renderTimeline() {
     
     const isLight = document.documentElement.classList.contains('light-theme');
     const textColor = isLight ? '#6b7280' : '#9ba1b5'; const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
-    const chartColor = isLight ? '#7c3aed' : '#a78bfa'; const chartBgColor = isLight ? 'rgba(124, 58, 237, 0.15)' : 'rgba(167, 139, 250, 0.15)';
+    const chartColor = isLight ? '#7c3aed' : '#8b5cf6'; const chartBgColor = isLight ? 'rgba(124, 58, 237, 0.15)' : 'rgba(139, 92, 246, 0.15)';
 
     timelineChartInstance = new Chart(ctx, {
         type: 'line', 
@@ -5252,8 +5259,8 @@ function renderTimeline() {
                 tooltip: { 
                     backgroundColor: isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(21, 25, 34, 0.9)', 
                     titleColor: isLight ? '#111827' : '#edf0f5', 
-                    bodyColor: isLight ? '#6d28d9' : '#7c5cfc', 
-                    borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(167,139,250,0.2)', 
+                    bodyColor: isLight ? '#6d28d9' : '#38bdf8', 
+                    borderColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(139, 92, 246,0.2)', 
                     borderWidth: 1, 
                     callbacks: { 
                         label: function(context) {
@@ -5734,7 +5741,7 @@ function openPopup(id) {
   let breakEvenHtml = '';
   if (price > 0 && acProfit > 0) {
       const targetFlights = Math.ceil(price / acProfit);  const remain = targetFlights - flightCount;
-      if (remain <= 0) breakEvenHtml = `<span style="font-size:12px; margin-left:12px; padding:2px 8px; border-radius:4px; background:var(--green-glow); color:var(--green); border:1px solid rgba(57,217,138,0.4); font-weight:600; letter-spacing:0.05em; white-space:nowrap;">已回本 🎉</span>`;
+      if (remain <= 0) breakEvenHtml = `<span style="font-size:12px; margin-left:12px; padding:2px 8px; border-radius:4px; background:var(--green-glow); color:var(--green); border:1px solid rgba(52, 211, 153,0.4); font-weight:600; letter-spacing:0.05em; white-space:nowrap;">已回本 🎉</span>`;
       else breakEvenHtml = `<span style="font-size:12px; margin-left:12px; color:var(--text3); font-weight:normal; white-space:nowrap;">(还需 <span style="color:var(--amber);font-weight:600">${remain}</span> 趟回本)</span>`;
   } else if (price > 0 && acProfit <= 0) { breakEvenHtml = `<span style="font-size:12px; margin-left:12px; color:var(--red); font-weight:normal; white-space:nowrap;">(负收益无法回本)</span>`; }
 
@@ -5798,7 +5805,7 @@ function openPopup(id) {
     <div class="popup-item"><label>客舱 / 载荷</label><div class="val">${seatDisplay}</div></div>
     
     <!-- 3. 右上和右下合并：总收益 (span 2 会让它横跨两行) -->
-    <div class="popup-item" style="grid-row: span 2; display: flex; flex-direction: column; justify-content: center; background:var(--cyan-glow); border-color:rgba(167,139,250,0.3);">
+    <div class="popup-item" style="grid-row: span 2; display: flex; flex-direction: column; justify-content: center; background:var(--cyan-glow); border-color:rgba(139, 92, 246,0.3);">
         <label style="color:var(--cyan)">当前总收益 (TOTAL EARNED)</label>
         <div class="val highlight" style="font-size:24px; margin-top:10px;">${Math.round(currentTotalRev).toLocaleString()} ${W_ICON}</div>
     </div>
@@ -6400,8 +6407,8 @@ function openWollarsDetail(code) {
     if (wollarsChartInstance) wollarsChartInstance.destroy();
     
     const isLight = document.documentElement.classList.contains('light-theme');
-    const chartColor = isLight ? '#d97706' : '#f5a623';
-    const chartBg = isLight ? 'rgba(217, 119, 6, 0.15)' : 'rgba(245, 166, 35, 0.15)';
+    const chartColor = isLight ? '#d97706' : '#f5c15c';
+    const chartBg = isLight ? 'rgba(217, 119, 6, 0.15)' : 'rgba(245, 193, 92, 0.15)';
     const textColor = isLight ? '#4a5568' : '#9ba1b5';
     const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
 
@@ -6553,8 +6560,8 @@ function openCoinPopup(type) {
     const cCtx = document.getElementById('coinChartCanvas');
     if (coinChartInstance) coinChartInstance.destroy();
     const isLight = document.documentElement.classList.contains('light-theme');
-    const cColor = isGold ? (isLight ? '#b7791f' : '#f5a623') : (isLight ? '#64748b' : '#c0c5d4');
-    const cBg = isGold ? (isLight ? 'rgba(183,121,31,0.15)' : 'rgba(245,166,35,0.15)') : (isLight ? 'rgba(100,116,139,0.15)' : 'rgba(192,197,212,0.15)');
+    const cColor = isGold ? (isLight ? '#b7791f' : '#f5c15c') : (isLight ? '#64748b' : '#c0c5d4');
+    const cBg = isGold ? (isLight ? 'rgba(183,121,31,0.15)' : 'rgba(245, 193, 92,0.15)') : (isLight ? 'rgba(100,116,139,0.15)' : 'rgba(192,197,212,0.15)');
     const cTextColor = isLight ? '#4a5568' : '#9ba1b5';
     const cGridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
     coinChartInstance = new Chart(cCtx, {
