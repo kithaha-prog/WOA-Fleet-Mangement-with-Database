@@ -27,6 +27,8 @@
 <!-- 引入 Leaflet 地图库 -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- 引入 Globe.gl (基于 Three.js) 用于 3D 地球模式：支持拖拽旋转、缩放与航线弧线 -->
+<script src="https://unpkg.com/globe.gl"></script>
 
 <!-- 云端账号 / 多设备同步：Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -960,7 +962,36 @@ tbody td { padding: 12px 10px; vertical-align: middle; white-space: nowrap; colo
 
 /* Map Styles */
 #fleet-map-container { background-color: var(--bg-deep); z-index: 1;}
-.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--bg-card) !important; color: var(--text1) !important; backdrop-filter: blur(10px); border: 1px solid var(--glass-border-lit); box-shadow: var(--glass-shadow); }
+#fleet-globe-container { background: radial-gradient(ellipse at 50% 40%, rgba(139,92,246,0.10), var(--bg-deep) 70%); z-index: 1; position: relative; cursor: grab; }
+#fleet-globe-container:active { cursor: grabbing; }
+#fleet-globe-container canvas { border-radius: var(--r-md); }
+.route-map-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 4px 6px 12px; }
+.map-mode-switch { display: inline-flex; gap: 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+.map-mode-btn { border: none; background: transparent; color: var(--text3); font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.5px; padding: 6px 16px; border-radius: 999px; cursor: pointer; transition: background var(--transition), color var(--transition), box-shadow var(--transition); display: flex; align-items: center; gap: 6px; }
+.map-mode-btn:hover { color: var(--text1); }
+.map-mode-btn.active { background: var(--purple); color: #08131a; box-shadow: 0 0 14px var(--purple-glow); }
+.globe-hint { font-family: var(--mono); font-size: 11px; color: var(--text3); display: flex; align-items: center; gap: 6px; }
+.globe-hint i { color: var(--purple); }
+.scene-tooltip { font-family: var(--mono, monospace) !important; }
+/* ── 地图弹窗样式增强：提高背景不透明度，确保在卫星地图和复杂地景下清晰可见 ── */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { 
+  background: rgba(15, 19, 28, 0.94) !important; 
+  color: var(--text1) !important; 
+  backdrop-filter: blur(16px); 
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border-lit); 
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65); 
+}
+
+/* 浅色与暖色/方格主题同步适配高清晰度背景 */
+html.light-theme .leaflet-popup-content-wrapper,
+html.light-theme .leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.96) !important;
+}
+html.strip-theme .leaflet-popup-content-wrapper,
+html.strip-theme .leaflet-popup-tip {
+  background: rgba(245, 239, 227, 0.96) !important;
+}
 .leaflet-container a.leaflet-popup-close-button { color: var(--text3); }
 
 /* Grid View */
@@ -1711,7 +1742,41 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
       </div>
       <div class="runway-stripe"></div>
       <div class="chart-card" style="padding: 10px; display: flex; flex-direction: column;">
+        <div class="route-map-toolbar">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <!-- 1. 2D / 3D 模式切换 -->
+            <div class="map-mode-switch" role="tablist">
+                <button type="button" class="map-mode-btn" id="map-mode-btn-2d" onclick="setRouteMapMode('2d')"><i class="fa-solid fa-map"></i> 2D 平面</button>
+                <button type="button" class="map-mode-btn" id="map-mode-btn-3d" onclick="setRouteMapMode('3d')"><i class="fa-solid fa-globe"></i> 3D 地球</button>
+            </div>
+
+            <!-- 2. 2D 专属地图样式切换 -->
+            <div class="map-mode-switch" id="map2d-style-switch" role="tablist">
+                <button type="button" class="map-mode-btn" id="map2d-btn-standard" onclick="setMap2DStyle('standard')"><i class="fa-solid fa-layer-group"></i> 标准地图</button>
+                <button type="button" class="map-mode-btn" id="map2d-btn-satellite" onclick="setMap2DStyle('satellite')"><i class="fa-solid fa-satellite"></i> 卫星影像</button>
+            </div>
+
+            <!-- 3. 2D 专属航线显示/隐藏开关 -->
+            <div class="map-mode-switch" id="map2d-routes-switch" role="tablist">
+                <button type="button" class="map-mode-btn active" id="map2d-btn-routes" onclick="toggle2DRoutes()"><i class="fa-solid fa-route"></i> 隐藏航线</button>
+            </div>
+
+            <!-- 4. 3D 专属地球样式切换 -->
+            <div class="map-mode-switch" id="globe3d-style-switch" role="tablist" style="display:none;">
+                <button type="button" class="map-mode-btn" id="globe3d-btn-dark" onclick="setGlobe3DStyle('dark')"><i class="fa-solid fa-moon"></i> 深空地景</button>
+                <button type="button" class="map-mode-btn" id="globe3d-btn-satellite" onclick="setGlobe3DStyle('satellite')"><i class="fa-solid fa-earth-americas"></i> 卫星地球</button>
+            </div>
+
+            <!-- 5. 【新增】3D 专属航线模式切换：流光 / 固定 -->
+            <div class="map-mode-switch" id="globe3d-arc-switch" role="tablist" style="display:none;">
+                <button type="button" class="map-mode-btn" id="globe3d-btn-arc-flow" onclick="setGlobe3DArcMode('flow')"><i class="fa-solid fa-wind"></i> 流光</button>
+                <button type="button" class="map-mode-btn active" id="globe3d-btn-arc-static" onclick="setGlobe3DArcMode('static')"><i class="fa-solid fa-minus"></i> 固定</button>
+            </div>
+        </div>
+        <div class="globe-hint" id="route-map-hint"><i class="fa-solid fa-hand-pointer"></i> 拖拽平移 · 滚轮缩放</div>
+        </div>
         <div id="fleet-map-container" style="height: 65vh; border-radius: var(--r-md); overflow: hidden; z-index: 1;"></div>
+        <div id="fleet-globe-container" style="height: 65vh; border-radius: var(--r-md); overflow: hidden; z-index: 1; display:none;"></div>
       </div>
     </section>
 
@@ -4287,9 +4352,14 @@ function setThemeMode(mode) {
                 ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
                 : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
             mapInstance.eachLayer(layer => {
-                if (layer instanceof L.TileLayer) mapInstance.removeLayer(layer);
+                update2DTileLayer();
             });
             L.tileLayer(mapUrl, { attribution: '&copy; CartoDB', subdomains: 'abcd', maxZoom: 19 }).addTo(mapInstance);
+        }
+        if (globeInstance) {
+            const purple = getComputedStyle(document.documentElement).getPropertyValue('--purple').trim() || '#b8a1fb';
+            globeInstance.atmosphereColor(purple).arcColor(() => [`${purple}dd`, `${purple}22`]);
+            renderGlobe(); // 重新计算机场配色
         }
     }
 }
@@ -4458,7 +4528,10 @@ function showView(name, el) {
   if (name === 'routes') renderRoutes();
   if (name === 'countries') renderCountries();
   if (name === 'routemap') {
-      setTimeout(() => { renderMap(); }, 150); 
+      syncRouteMapToolbarUI();
+      setTimeout(() => { 
+          if (typeof refreshRouteMap === 'function') refreshRouteMap(); 
+      }, 80);
   }
   renderCoinRefreshBadge(); // 每次切换视图后，重新判断是否应显示右下角金币提示
 }
@@ -4818,101 +4891,403 @@ function closeRoiModelDetail() {
 // ═══════════════════════════════════════════════
 // LEAFLET MAP ENGINE - 修复性能与掉帧
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// 2D 平面地图 / 3D 地球 独立状态与双引擎系统
+// ═══════════════════════════════════════════════
 let mapInstance = null;
+let globeInstance = null;
 
-function renderMap() {
-    if (!mapInstance) {
-        // [修改核心] preferCanvas: true 大幅提升百条/千条折线绘制时的帧数表现
-        mapInstance = L.map('fleet-map-container', { preferCanvas: true }).setView([20, 0], 2);
-        const isLight = document.documentElement.classList.contains('light-theme');
+// 1. 独立记忆状态：2D/3D 模式、底图样式、2D航线可见性、3D航线动效模式
+let routeMapMode = localStorage.getItem('woa_route_map_mode') || '2d';
+let map2dStyle = localStorage.getItem('woa_map2d_style') || 'standard';
+let globe3dStyle = localStorage.getItem('woa_globe3d_style') || 'dark';
+let show2dRoutes = localStorage.getItem('woa_show_2d_routes') !== 'false'; // 默认开启 2D 航线
+let globe3dArcMode = localStorage.getItem('woa_globe3d_arc_mode') || 'static'; // 'static' (固定) | 'flow' (流光)
+
+// 2. 3D 地球官方稳定贴图预设
+const GLOBE_STYLE_PRESETS = {
+    dark: {
+        globeImageUrl: 'https://unpkg.com/three-globe/example/img/earth-dark.jpg',
+        bumpImageUrl: 'https://unpkg.com/three-globe/example/img/earth-topology.png',
+        backgroundImageUrl: 'https://unpkg.com/three-globe/example/img/night-sky.png',
+        atmosphereColor: '#8b5cf6'
+    },
+    satellite: {
+        globeImageUrl: 'https://unpkg.com/three-globe/example/img/earth-day.jpg',
+        bumpImageUrl: 'https://unpkg.com/three-globe/example/img/earth-topology.png',
+        backgroundImageUrl: 'https://unpkg.com/three-globe/example/img/night-sky.png',
+        atmosphereColor: '#38bdf8'
+    }
+};
+
+// ── 3. 同步控制条显隐与按钮状态 ──
+function syncRouteMapToolbarUI() {
+    const is2D = routeMapMode === '2d';
+    
+    document.getElementById('map-mode-btn-2d')?.classList.toggle('active', is2D);
+    document.getElementById('map-mode-btn-3d')?.classList.toggle('active', !is2D);
+
+    const mapEl = document.getElementById('fleet-map-container');
+    const globeEl = document.getElementById('fleet-globe-container');
+    if (mapEl) mapEl.style.display = is2D ? '' : 'none';
+    if (globeEl) globeEl.style.display = is2D ? 'none' : '';
+
+    const switch2d = document.getElementById('map2d-style-switch');
+    const switch2dRoutes = document.getElementById('map2d-routes-switch');
+    const switch3d = document.getElementById('globe3d-style-switch');
+    const switch3dArc = document.getElementById('globe3d-arc-switch');
+
+    if (switch2d) switch2d.style.display = is2D ? 'inline-flex' : 'none';
+    if (switch2dRoutes) switch2dRoutes.style.display = is2D ? 'inline-flex' : 'none';
+    if (switch3d) switch3d.style.display = is2D ? 'none' : 'inline-flex';
+    if (switch3dArc) switch3dArc.style.display = is2D ? 'none' : 'inline-flex';
+
+    document.getElementById('map2d-btn-standard')?.classList.toggle('active', map2dStyle === 'standard');
+    document.getElementById('map2d-btn-satellite')?.classList.toggle('active', map2dStyle === 'satellite');
+    document.getElementById('globe3d-btn-dark')?.classList.toggle('active', globe3dStyle === 'dark');
+    document.getElementById('globe3d-btn-satellite')?.classList.toggle('active', globe3dStyle === 'satellite');
+
+    // 3D 航线「流光/固定」高亮同步
+    document.getElementById('globe3d-btn-arc-flow')?.classList.toggle('active', globe3dArcMode === 'flow');
+    document.getElementById('globe3d-btn-arc-static')?.classList.toggle('active', globe3dArcMode === 'static');
+
+    // 2D 航线开关文字与高亮同步
+    const btnRoutes = document.getElementById('map2d-btn-routes');
+    if (btnRoutes) {
+        btnRoutes.classList.toggle('active', show2dRoutes);
+        btnRoutes.innerHTML = show2dRoutes
+            ? '<i class="fa-solid fa-route"></i> 隐藏航线'
+            : '<i class="fa-solid fa-route-slash"></i> 显示航线';
+    }
+
+    const hint = document.getElementById('route-map-hint');
+    if (hint) {
+        hint.innerHTML = !is2D
+            ? '<i class="fa-solid fa-hand"></i> 拖拽旋转 · 滚轮缩放 · 3D航线可自由切换动静特效'
+            : '<i class="fa-solid fa-hand-pointer"></i> 拖拽平移 · 滚轮缩放';
+    }
+}
+
+// ── 4. 各种切换按钮回调函数 ──
+function setRouteMapMode(mode) {
+    if (mode !== '2d' && mode !== '3d') return;
+    routeMapMode = mode;
+    localStorage.setItem('woa_route_map_mode', mode);
+    syncRouteMapToolbarUI();
+    setTimeout(() => { refreshRouteMap(); }, 80);
+}
+
+function setMap2DStyle(style) {
+    if (style !== 'standard' && style !== 'satellite') return;
+    map2dStyle = style;
+    localStorage.setItem('woa_map2d_style', style);
+    syncRouteMapToolbarUI();
+    renderMap();
+}
+
+function toggle2DRoutes() {
+    show2dRoutes = !show2dRoutes;
+    localStorage.setItem('woa_show_2d_routes', show2dRoutes);
+    syncRouteMapToolbarUI();
+    renderMap();
+}
+
+function setGlobe3DStyle(style) {
+    if (style !== 'dark' && style !== 'satellite') return;
+    globe3dStyle = style;
+    localStorage.setItem('woa_globe3d_style', style);
+    syncRouteMapToolbarUI();
+    
+    if (globeInstance) {
+        const preset = GLOBE_STYLE_PRESETS[globe3dStyle];
+        globeInstance
+            .globeImageUrl(preset.globeImageUrl)
+            .bumpImageUrl(preset.bumpImageUrl)
+            .backgroundImageUrl(preset.backgroundImageUrl)
+            .atmosphereColor(preset.atmosphereColor);
+    } else {
+        renderGlobe();
+    }
+}
+
+// 【新增】3D 航线模式切换：流光 vs 固定
+function setGlobe3DArcMode(mode) {
+    if (mode !== 'flow' && mode !== 'static') return;
+    globe3dArcMode = mode;
+    localStorage.setItem('woa_globe3d_arc_mode', mode);
+    syncRouteMapToolbarUI();
+    
+    if (globeInstance) {
+        // 动态应用或取消流光特效
+        applyGlobe3DArcAnimation();
+    } else {
+        renderGlobe();
+    }
+}
+
+// 【新增】将航线特效动态挂载到 Globe 实例
+function applyGlobe3DArcAnimation() {
+    if (!globeInstance) return;
+    const isFlow = globe3dArcMode === 'flow';
+    globeInstance
+        .arcDashLength(isFlow ? 0.38 : null)
+        .arcDashGap(isFlow ? 0.22 : null)
+        .arcDashInitialGap(isFlow ? () => Math.random() * 5 : null)
+        .arcDashAnimateTime(isFlow ? 1500 : 0);
+}
+
+// ── 5. 2D 底图切片设置 ──
+function update2DTileLayer() {
+    if (!mapInstance) return;
+    mapInstance.eachLayer(layer => {
+        if (layer instanceof L.TileLayer) mapInstance.removeLayer(layer);
+    });
+    
+    if (map2dStyle === 'satellite') {
+        L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            attribution: '&copy; Google Maps Imagery',
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+        }).addTo(mapInstance);
+    } else {
+        const isLight = document.documentElement.classList.contains('light-theme') || 
+                        document.documentElement.classList.contains('strip-theme');
         const mapUrl = isLight 
             ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
             : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-        
         L.tileLayer(mapUrl, {
-            attribution: '&copy; <a href="https://carto.com/">CartoDB</a>',
-            subdomains: 'abcd',
-            maxZoom: 19
+            attribution: '&copy; CartoDB', subdomains: 'abcd', maxZoom: 19
         }).addTo(mapInstance);
+    }
+}
+
+// ── 6. 2D Leaflet 渲染引擎 (支持显示/隐藏航线) ──
+function renderMap() {
+    if (!mapInstance) {
+        mapInstance = L.map('fleet-map-container', { preferCanvas: true }).setView([20, 0], 2);
     } else {
         mapInstance.invalidateSize();
     }
 
-    // 清空重绘
+    update2DTileLayer();
+
     mapInstance.eachLayer(layer => {
         if (layer instanceof L.Marker || layer instanceof L.Polyline) {
             mapInstance.removeLayer(layer);
         }
     });
 
-    // ── 聚合每个机场的枢纽数据（基地次数 / 目的地次数），避免同机场重复画点 ──
     const airportAgg = {};
     fleet.forEach(ac => {
         if (ac.base) { if (!airportAgg[ac.base]) airportAgg[ac.base] = { asBase: 0, asDest: 0 }; airportAgg[ac.base].asBase++; }
         if (ac.dest) { if (!airportAgg[ac.dest]) airportAgg[ac.dest] = { asBase: 0, asDest: 0 }; airportAgg[ac.dest].asDest++; }
     });
 
-    // ── 绘制航线连线（去重）──
+    if (show2dRoutes) {
+        const drawnRoutes = new Set();
+        fleet.forEach(ac => {
+            const bInfo = getCityInfo(ac.base);
+            const dInfo = getCityInfo(ac.dest);
+            if (bInfo && bInfo.lat && dInfo && dInfo.lat) {
+                const routeKey = `${ac.base}-${ac.dest}`;
+                const reverseKey = `${ac.dest}-${ac.base}`;
+                let startLon = bInfo.lon;
+                let endLon = dInfo.lon;
+                if (Math.abs(startLon - endLon) > 180) {
+                    if (startLon > endLon) { endLon += 360; } else { startLon += 360; }
+                }
+                if (!drawnRoutes.has(routeKey) && !drawnRoutes.has(reverseKey)) {
+                    const lineColor = map2dStyle === 'satellite' ? '#c4b5fd' : '#8b5cf6';
+                    L.polyline([[bInfo.lat, startLon], [dInfo.lat, endLon]], {
+                        color: lineColor, weight: 2, opacity: 0.8, dashArray: '4, 6'
+                    }).addTo(mapInstance);
+                    drawnRoutes.add(routeKey);
+                }
+            }
+        });
+    }
+
+    Object.keys(airportAgg).forEach(code => {
+        const info = getCityInfo(code);
+        if (!info || !info.lat) return;
+        const stat = airportAgg[code];
+        const total = stat.asBase + stat.asDest;
+        let tierColor = 'var(--amber)', tierGlow = 'var(--amber-glow)', tierLabel = '普通航点', dotSize = 9;
+        if (stat.asBase > 0) { tierColor = 'var(--gold)'; tierGlow = 'var(--gold-glow)'; tierLabel = '枢纽'; dotSize = 22; }
+        else if (total > 10) { tierColor = 'var(--cyan)'; tierGlow = 'var(--cyan-glow)'; tierLabel = '重点机场'; dotSize = 15; }
+
+        const icon = L.divIcon({
+            html: `<div style="display:flex; align-items:center; justify-content:center; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background:${tierGlow}; border:2px solid ${tierColor}; box-shadow:0 0 ${Math.round(dotSize*0.7)}px ${tierGlow};"><div style="width:${Math.max(3,Math.round(dotSize*0.28))}px; height:${Math.max(3,Math.round(dotSize*0.28))}px; border-radius:50%; background:${tierColor};"></div></div>`,
+            className: 'custom-icon', iconSize: [dotSize, dotSize], iconAnchor: [dotSize/2, dotSize/2]
+        });
+
+        const marker = L.marker([info.lat, info.lon], { icon, zIndexOffset: total * 10 }).addTo(mapInstance);
+        marker.bindTooltip(`<b>${code}</b> · ${tierLabel}<br/>${info.name}<br/>基地 ${stat.asBase} · 目的地 ${stat.asDest}`, { direction: 'top', offset: [0, -dotSize/2] });
+       marker.bindPopup(`
+            <div style="position:relative;">
+                <b>${code}</b> <span style="color:var(--amber); font-size:11px;">${tierLabel}</span><br/>
+                <span style="color:var(--text2); font-size:12px;">${info.name}</span><br/>
+                <div style="margin-top:2px;">${getFlagImg(info)} <span style="font-size:11px; color:var(--text3);">${info.country}</span></div>
+                <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08); font-size:12px;">
+                    作为基地 <b style="color:var(--text1)">${stat.asBase}</b> 次 · 作为目的地 <b style="color:var(--text1)">${stat.asDest}</b> 次
+                </div>
+                
+                <!-- 底部操作栏：查看详情（左，自动伸缩） + 跑道追踪按钮（右，固定方块） -->
+                <div style="margin-top:10px; display:flex; gap:8px; align-items:stretch;">
+                    <button onclick="openAirportInfo('${code}')" 
+                            style="flex:1; padding:7px 10px; border:none; border-radius:6px; background:linear-gradient(135deg, #8b5cf6, #38bdf8); color:#fff; font-weight:600; cursor:pointer; box-shadow:0 2px 10px rgba(139,92,246,0.3); transition:all 0.2s;">
+                        查看完整详情
+                    </button>
+                    
+                    <button onclick="zoomToAirport('${code}')" title="飞掠并缩放到跑道视角" 
+                            style="width:36px; flex-shrink:0; border-radius:6px; background:rgba(139, 92, 246, 0.2); border:1px solid var(--cyan); color:var(--cyan); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s;"
+                            onmouseover="this.style.background='var(--cyan)'; this.style.color='#08131a'; this.style.transform='scale(1.05)'"
+                            onmouseout="this.style.background='rgba(139, 92, 246, 0.2)'; this.style.color='var(--cyan)'; this.style.transform='scale(1)'">
+                        <i class="fa-solid fa-location-crosshairs" style="font-size:14px;"></i>
+                    </button>
+                </div>
+            </div>
+        `);
+    });
+}
+
+// ── 智能追踪/定位并放大至跑道视角 (对应图二效果) ──
+function zoomToAirport(code) {
+    const info = getCityInfo(code);
+    if (!info || !info.lat || !info.lon) {
+        toast('未找到该机场的坐标信息', true);
+        return;
+    }
+
+    // 1. 如果当前处于 3D 地球模式，自动切回 2D 平面地图
+    if (routeMapMode !== '2d') {
+        setRouteMapMode('2d');
+    }
+
+    // 2. 自动切换为「卫星影像」底图，以完美呈现图二的机场俯瞰视角
+    if (map2dStyle !== 'satellite') {
+        setMap2DStyle('satellite');
+    }
+
+    // 3. 关闭当前弹窗，避免遮挡跑道视野
+    if (mapInstance) {
+        mapInstance.closePopup();
+
+        // 4. 采用平滑俯冲动画过渡到机场上空 (Zoom level: 14 代表跑道/航站楼级视角)
+        mapInstance.flyTo([info.lat, info.lon], 14, {
+            animate: true,
+            duration: 1.5,
+            easeLinearity: 0.25
+        });
+
+        toast(`已为你锁定了 ${code} - ${info.name} 上空`);
+    }
+}
+
+// ── 7. 3D 地球渲染引擎 (支持「流光」和「固定」动态切换) ──
+function renderGlobe() {
+    const container = document.getElementById('fleet-globe-container');
+    if (!container || typeof Globe === 'undefined') return;
+
+    const airportAgg = {};
+    fleet.forEach(ac => {
+        if (ac.base) { if (!airportAgg[ac.base]) airportAgg[ac.base] = { asBase: 0, asDest: 0 }; airportAgg[ac.base].asBase++; }
+        if (ac.dest) { if (!airportAgg[ac.dest]) airportAgg[ac.dest] = { asBase: 0, asDest: 0 }; airportAgg[ac.dest].asDest++; }
+    });
+
     const drawnRoutes = new Set();
+    const routeList = [];
     fleet.forEach(ac => {
         const bInfo = getCityInfo(ac.base);
         const dInfo = getCityInfo(ac.dest);
         if (bInfo && bInfo.lat && dInfo && dInfo.lat) {
             const routeKey = `${ac.base}-${ac.dest}`;
             const reverseKey = `${ac.dest}-${ac.base}`;
-            
-            // 【新增逻辑】跨太平洋航线修正 (国际日期变更线)
-            let startLon = bInfo.lon;
-            let endLon = dInfo.lon;
-            if (Math.abs(startLon - endLon) > 180) {
-                if (startLon > endLon) { endLon += 360; }
-                else { startLon += 360; }
-            }
-
             if (!drawnRoutes.has(routeKey) && !drawnRoutes.has(reverseKey)) {
-                L.polyline([[bInfo.lat, startLon], [dInfo.lat, endLon]], {
-                    color: '#8b5cf6',
-                    weight: 2,
-                    opacity: 0.5,
-                    dashArray: '4, 6'
-                }).addTo(mapInstance);
+                routeList.push({ base: ac.base, dest: ac.dest, bInfo, dInfo });
                 drawnRoutes.add(routeKey);
             }
         }
     });
 
-    // ── 按枢纽等级绘制机场标记（大小/颜色随航线总数分级）──
-    Object.keys(airportAgg).forEach(code => {
+    const pointsData = Object.keys(airportAgg).map(code => {
         const info = getCityInfo(code);
-        if (!info || !info.lat) return;
+        if (!info || !info.lat) return null;
         const stat = airportAgg[code];
         const total = stat.asBase + stat.asDest;
+        let tierColor = '#f5c15c', tierLabel = '普通航点', dotSize = 9;
+        if (stat.asBase > 0) { tierColor = '#f5c15c'; tierLabel = '枢纽'; dotSize = 22; }
+        else if (total > 10) { tierColor = '#38bdf8'; tierLabel = '重点机场'; dotSize = 15; }
+        return { lat: info.lat, lng: info.lon, code, name: info.name, country: info.country, tierColor, tierLabel, dotSize, total, stat };
+    }).filter(Boolean);
 
-        let tierColor = 'var(--amber)', tierGlow = 'var(--amber-glow)', tierLabel = '普通航点', dotSize = 9;
-        // 只要作为基地触发过，就是枢纽 (金色大圆点)
-        if (stat.asBase > 0) { tierColor = 'var(--gold)'; tierGlow = 'var(--gold-glow)'; tierLabel = '枢纽'; dotSize = 22; }
-        // 否则，如果总通航次数大于 10，就是重点机场 (青色中圆点)
-        else if (total > 10) { tierColor = 'var(--cyan)'; tierGlow = 'var(--cyan-glow)'; tierLabel = '重点机场'; dotSize = 15; }
+    const arcsData = routeList.map(r => ({
+        startLat: r.bInfo.lat, startLng: r.bInfo.lon, endLat: r.dInfo.lat, endLng: r.dInfo.lon,
+        base: r.base, dest: r.dest
+    }));
 
-        const icon = L.divIcon({
-            html: `<div style="display:flex; align-items:center; justify-content:center; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background:${tierGlow}; border:2px solid ${tierColor}; box-shadow:0 0 ${Math.round(dotSize*0.7)}px ${tierGlow};"><div style="width:${Math.max(3,Math.round(dotSize*0.28))}px; height:${Math.max(3,Math.round(dotSize*0.28))}px; border-radius:50%; background:${tierColor};"></div></div>`,
-            className: 'custom-icon',
-            iconSize: [dotSize, dotSize],
-            iconAnchor: [dotSize/2, dotSize/2]
-        });
+    if (!globeInstance) {
+        const stylePreset = GLOBE_STYLE_PRESETS[globe3dStyle] || GLOBE_STYLE_PRESETS.dark;
+        globeInstance = Globe()(container)
+            .globeImageUrl(stylePreset.globeImageUrl)
+            .bumpImageUrl(stylePreset.bumpImageUrl)
+            .backgroundImageUrl(stylePreset.backgroundImageUrl)
+            .backgroundColor('rgba(0,0,0,0)')
+            .showAtmosphere(true)
+            .atmosphereColor(stylePreset.atmosphereColor)
+            .atmosphereAltitude(0.2)
+            .pointAltitude(0.008)
+            .pointRadius(d => Math.max(0.28, d.dotSize / 20))
+            .pointColor(d => d.tierColor)
+            .pointResolution(12)
+            .pointLabel(d => `<div style="font-family:var(--mono, monospace); font-size:12px; line-height:1.5;"><b>${d.code}</b> · ${d.tierLabel}<br/>${d.name}<br/>基地 ${d.stat.asBase} · 目的地 ${d.stat.asDest}</div>`)
+            .onPointClick(d => { if (typeof openAirportInfo === 'function') openAirportInfo(d.code); })
+            .arcColor(() => ['#8b5cf6', '#38bdf8'])
+            .arcAltitudeAutoScale(0.35)
+            .arcStroke(0.65)
+            .arcLabel(d => `<div style="font-family:var(--mono, monospace); font-size:12px;"><b>${d.base}</b> → <b>${d.dest}</b></div>`)
+            .enablePointerInteraction(true);
 
-        const marker = L.marker([info.lat, info.lon], { icon, zIndexOffset: total * 10 }).addTo(mapInstance);
-        marker.bindTooltip(
-            `<b>${code}</b> · ${tierLabel}<br/>${info.name}<br/>基地 ${stat.asBase} · 目的地 ${stat.asDest}`,
-            { direction: 'top', offset: [0, -dotSize/2] }
-        );
-        marker.bindPopup(
-            `<b>${code}</b> ${tierLabel}<br/>${info.name}<br/>${info.country} ${getFlagImg(info)}<br/>
-             <div style="margin-top:6px; font-size:12px;">作为基地 <b>${stat.asBase}</b> 次 · 作为目的地 <b>${stat.asDest}</b> 次</div>
-             <button onclick="openAirportInfo('${code}')" style="margin-top:8px; width:100%; padding:6px; border:none; border-radius:6px; background:#8b5cf6; color:#08131a; font-weight:600; cursor:pointer;">查看完整详情</button>`
-        );
-    });
+        const controls = globeInstance.controls();
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.35;
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 150;
+        controls.maxDistance = 800;
+        container.addEventListener('pointerdown', () => { controls.autoRotate = false; });
+    }
+
+    globeInstance.pointsData(pointsData).arcsData(arcsData);
+    
+    // 应用当前选中的「流光 / 固定」模式
+    applyGlobe3DArcAnimation();
+
+    const w = container.clientWidth || container.offsetWidth || 800;
+    const h = container.clientHeight || container.offsetHeight || 500;
+    globeInstance.width(w).height(h);
 }
+
+// ── 8. 统一调度视图渲染 ──
+function refreshRouteMap() {
+    if (!document.getElementById('view-routemap')?.classList.contains('active')) return;
+    syncRouteMapToolbarUI();
+    if (routeMapMode === '3d') {
+        renderGlobe();
+    } else {
+        renderMap();
+    }
+}
+
+// ── 9. 窗口缩放保护 ──
+window.addEventListener('resize', () => {
+    if (routeMapMode === '3d' && globeInstance && document.getElementById('view-routemap')?.classList.contains('active')) {
+        const container = document.getElementById('fleet-globe-container');
+        const w = container.clientWidth || container.offsetWidth;
+        const h = container.clientHeight || container.offsetHeight;
+        if (w > 0 && h > 0) globeInstance.width(w).height(h);
+    }
+});
 
 // ═══════════════════════════════════════════════
 // DATA EXPORT/IMPORT
@@ -6027,7 +6402,7 @@ function undoDelete() {
     persistFleet(); persistRoutes(); syncFilters(); renderFleet(); renderRoutes();
     if(document.getElementById('view-profitchart').classList.contains('active')) renderProfitCurve();
     if(document.getElementById('view-timeline').classList.contains('active')) renderTimeline();
-    if(document.getElementById('view-routemap').classList.contains('active')) renderMap();
+    if(document.getElementById('view-routemap').classList.contains('active')) refreshRouteMap();
     toast('撤回成功，已恢复删除的数据');
 }
 
@@ -6050,7 +6425,7 @@ function confirmDelete() {
   lastDeleted = { fleet: deletedFleet, routes: deletedRoutes };
   persistRoutes(); persistFleet(); syncFilters(); closeConfirm(); renderFleet(); renderRoutes(); updateBulkBar(); 
   if(document.getElementById('view-timeline').classList.contains('active')) renderTimeline();
-  if(document.getElementById('view-routemap').classList.contains('active')) renderMap();
+  if(document.getElementById('view-routemap').classList.contains('active')) refreshRouteMap();
   toast(`飞机 ${a?.reg || ''} 已退役并清理`, false, undoDelete);
 }
 
@@ -6069,7 +6444,7 @@ function bulkDelete() {
   lastDeleted = { fleet: deletedFleet, routes: deletedRoutes };
   persistRoutes(); persistFleet(); syncFilters(); renderFleet(); renderRoutes(); updateBulkBar(); 
   if(document.getElementById('view-timeline').classList.contains('active')) renderTimeline();
-  if(document.getElementById('view-routemap').classList.contains('active')) renderMap();
+  if(document.getElementById('view-routemap').classList.contains('active')) refreshRouteMap();
   toast(`已批量退役 ${deletedFleet.length} 架飞机`, false, undoDelete);
 }
 
@@ -6348,7 +6723,7 @@ function proceedSaveAircraft() {
   } else { if (existingRouteIdx >= 0) routes.splice(existingRouteIdx, 1); }
   
   persistRoutes(); syncFilters(); clearForm(); 
-  if (mapInstance && document.getElementById('view-routemap').classList.contains('active')) renderMap();
+  if (document.getElementById('view-routemap').classList.contains('active')) refreshRouteMap();
 
   if (wasEditing) {
       toast('机队档案已修改保存'); showView('fleet', document.querySelector('[data-view="fleet"]'));
