@@ -972,6 +972,24 @@ tbody td { padding: 12px 10px; vertical-align: middle; white-space: nowrap; colo
 .map-mode-btn.active { background: var(--purple); color: #08131a; box-shadow: 0 0 14px var(--purple-glow); }
 .globe-hint { font-family: var(--mono); font-size: 11px; color: var(--text3); display: flex; align-items: center; gap: 6px; }
 .globe-hint i { color: var(--purple); }
+
+/* 地图全屏模式：卡片撑满屏幕，内部地图容器自动补满剩余高度 */
+#route-map-card:fullscreen,
+#route-map-card:-webkit-full-screen {
+    width: 100vw; height: 100vh; background: var(--bg-deep);
+    display: flex; flex-direction: column; padding: 14px !important;
+    overflow: hidden;
+}
+#route-map-card:fullscreen #fleet-map-container,
+#route-map-card:fullscreen #fleet-globe-container,
+#route-map-card:-webkit-full-screen #fleet-map-container,
+#route-map-card:-webkit-full-screen #fleet-globe-container {
+    height: auto !important; flex: 1; min-height: 0;
+}
+#route-map-card:fullscreen .route-map-toolbar,
+#route-map-card:-webkit-full-screen .route-map-toolbar {
+    flex-shrink: 0;
+}
 .scene-tooltip { font-family: var(--mono, monospace) !important; }
 /* ── 地图弹窗样式增强：提高背景不透明度，确保在卫星地图和复杂地景下清晰可见 ── */
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { 
@@ -1746,7 +1764,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         <p>全球机队航线网络实时动态监控。依据您登记的活跃基地与目的地自动渲染。</p>
       </div>
       <div class="runway-stripe"></div>
-      <div class="chart-card" style="padding: 10px; display: flex; flex-direction: column;">
+      <div class="chart-card" id="route-map-card" style="padding: 10px; display: flex; flex-direction: column;">
         <div class="route-map-toolbar">
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
             <!-- 1. 2D / 3D 模式切换 -->
@@ -1778,7 +1796,12 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
                 <button type="button" class="map-mode-btn active" id="globe3d-btn-arc-static" onclick="setGlobe3DArcMode('static')"><i class="fa-solid fa-minus"></i> 固定</button>
             </div>
         </div>
-        <div class="globe-hint" id="route-map-hint"><i class="fa-solid fa-hand-pointer"></i> 拖拽平移 · 滚轮缩放</div>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div class="globe-hint" id="route-map-hint"><i class="fa-solid fa-hand-pointer"></i> 拖拽平移 · 滚轮缩放</div>
+            <button type="button" class="map-mode-btn" id="map-fullscreen-btn" onclick="toggleMapFullscreen()" title="全屏查看地图">
+                <i class="fa-solid fa-expand" id="map-fullscreen-icon"></i> 全屏
+            </button>
+        </div>
         </div>
         <div id="fleet-map-container" style="height: 65vh; border-radius: var(--r-md); overflow: hidden; z-index: 1;"></div>
         <div id="fleet-globe-container" style="height: 65vh; border-radius: var(--r-md); overflow: hidden; z-index: 1; display:none;"></div>
@@ -5059,6 +5082,40 @@ function toggle2DRoutes() {
     renderMap();
 }
 
+// ── 地图全屏切换 ──
+function toggleMapFullscreen() {
+    const card = document.getElementById('route-map-card');
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!isFs) {
+        (card.requestFullscreen || card.webkitRequestFullscreen)?.call(card);
+    } else {
+        (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    }
+}
+
+function onMapFullscreenChange() {
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const icon = document.getElementById('map-fullscreen-icon');
+    const btn = document.getElementById('map-fullscreen-btn');
+    if (icon) icon.className = isFs ? 'fa-solid fa-compress' : 'fa-solid fa-expand';
+    if (btn) btn.innerHTML = isFs
+        ? '<i class="fa-solid fa-compress" id="map-fullscreen-icon"></i> 退出全屏'
+        : '<i class="fa-solid fa-expand" id="map-fullscreen-icon"></i> 全屏';
+    // 全屏切换会改变容器实际像素尺寸，Leaflet / Globe.gl 需要手动触发重新计算，
+    // 否则地图画面会停留在切换前的尺寸，出现留白或裁切
+    setTimeout(() => {
+        if (mapInstance) mapInstance.invalidateSize();
+        if (globeInstance) {
+            const container = document.getElementById('fleet-globe-container');
+            const w = container.clientWidth || container.offsetWidth;
+            const h = container.clientHeight || container.offsetHeight;
+            if (w > 0 && h > 0) globeInstance.width(w).height(h);
+        }
+    }, 120);
+}
+document.addEventListener('fullscreenchange', onMapFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onMapFullscreenChange);
+
 function setGlobe3DStyle(style) {
     if (style !== 'dark' && style !== 'satellite') return;
     globe3dStyle = style;
@@ -5179,12 +5236,25 @@ function renderMap() {
         if (!info || !info.lat) return;
         const stat = airportAgg[code];
         const total = stat.asBase + stat.asDest;
-        let tierColor = 'var(--amber)', tierGlow = 'var(--amber-glow)', tierLabel = '普通航点', dotSize = 9;
-        if (stat.asBase > 0) { tierColor = 'var(--gold)'; tierGlow = 'var(--gold-glow)'; tierLabel = '枢纽'; dotSize = 22; }
-        else if (total > 10) { tierColor = 'var(--cyan)'; tierGlow = 'var(--cyan-glow)'; tierLabel = '重点机场'; dotSize = 15; }
+        const isSat = (map2dStyle === 'satellite');
+        // 卫星影像底图色调偏绿/棕/蓝，原本的琥珀色 pin 容易被地表颜色"吃掉"，
+        // 卫星模式下换成饱和度更高、与自然地貌反差更大的配色，并加白色描边进一步提升可视性
+        let tierColor = isSat ? '#ff3b6b' : 'var(--amber)';
+        let tierGlow  = isSat ? 'rgba(255,59,107,0.45)' : 'var(--amber-glow)';
+        let tierLabel = '普通航点', dotSize = 9;
+        if (stat.asBase > 0) {
+            tierColor = isSat ? '#ffd60a' : 'var(--gold)';
+            tierGlow  = isSat ? 'rgba(255,214,10,0.5)' : 'var(--gold-glow)';
+            tierLabel = '枢纽'; dotSize = 22;
+        } else if (total > 10) {
+            tierColor = isSat ? '#00f0ff' : 'var(--cyan)';
+            tierGlow  = isSat ? 'rgba(0,240,255,0.45)' : 'var(--cyan-glow)';
+            tierLabel = '重点机场'; dotSize = 15;
+        }
+        const ringBorder = isSat ? `3px solid #ffffff` : `2px solid ${tierColor}`;
 
         const icon = L.divIcon({
-            html: `<div style="display:flex; align-items:center; justify-content:center; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background:${tierGlow}; border:2px solid ${tierColor}; box-shadow:0 0 ${Math.round(dotSize*0.7)}px ${tierGlow};"><div style="width:${Math.max(3,Math.round(dotSize*0.28))}px; height:${Math.max(3,Math.round(dotSize*0.28))}px; border-radius:50%; background:${tierColor};"></div></div>`,
+            html: `<div style="display:flex; align-items:center; justify-content:center; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background:${tierGlow}; border:${ringBorder}; box-shadow:0 0 ${Math.round(dotSize*0.7)}px ${tierGlow}${isSat ? ', 0 1px 4px rgba(0,0,0,0.6)' : ''};"><div style="width:${Math.max(3,Math.round(dotSize*0.28))}px; height:${Math.max(3,Math.round(dotSize*0.28))}px; border-radius:50%; background:${tierColor};"></div></div>`,
             className: 'custom-icon', iconSize: [dotSize, dotSize], iconAnchor: [dotSize/2, dotSize/2]
         });
 
