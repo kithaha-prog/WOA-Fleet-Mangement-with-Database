@@ -2536,7 +2536,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 </div>
 
 <!-- 忘记密码：第一步，发送重置邮件 -->
-<div class="popup-overlay" id="forgot-password-modal" onclick="if(event.target===this) closeForgotPasswordModal()">
+<div class="popup-overlay" id="forgot-password-modal" style="z-index:10000;" onclick="if(event.target===this) closeForgotPasswordModal()">
   <div class="popup-box" style="max-width: 420px;">
     <button class="popup-close-float" onclick="closeForgotPasswordModal()"><i class="fa-solid fa-xmark"></i></button>
     <div class="popup-header" style="padding: 20px 28px;">
@@ -2554,7 +2554,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 </div>
 
 <!-- 忘记密码：第二步，用户点击邮件中的链接返回本站后，设置新密码 -->
-<div class="popup-overlay" id="reset-password-modal">
+<div class="popup-overlay" id="reset-password-modal" style="z-index:10000;">
   <div class="popup-box" style="max-width: 420px;">
     <div class="popup-header" style="padding: 20px 28px;">
       <div class="popup-title"><i class="fa-solid fa-key"></i> 设置新密码</div>
