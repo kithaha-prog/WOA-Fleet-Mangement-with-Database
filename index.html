@@ -2518,9 +2518,11 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 <div class="popup-overlay" id="change-password-modal" onclick="if(event.target===this) closeChangePasswordModal()">
   <div class="popup-box" style="max-width: 420px;">
     <button class="popup-close-float" onclick="closeChangePasswordModal()"><i class="fa-solid fa-xmark"></i></button>
-    <div class="popup-header" style="padding: 20px 28px;">
-      <div class="popup-title"><i class="fa-solid fa-key"></i> 修改密码</div>
-      <div class="popup-subtitle" style="margin-top: 4px;">需先验证邮箱与旧密码</div>
+    <div class="popup-header" style="padding: 20px 64px 20px 28px;">
+      <div>
+        <div class="popup-title"><i class="fa-solid fa-key"></i> 修改密码</div>
+        <div class="popup-subtitle" style="margin-top: 4px;">需先验证邮箱与旧密码</div>
+      </div>
     </div>
     <div class="popup-body" style="display: block; padding: 20px 28px 24px;">
       <div class="auth-field"><label>邮箱</label><input type="email" id="cp-email" autocomplete="username" readonly style="opacity:0.75; cursor:not-allowed;" /></div>
@@ -2529,6 +2531,9 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
       <div class="auth-field"><label>确认新密码</label><input type="password" id="cp-new-password2" autocomplete="new-password" placeholder="再次输入新密码" /></div>
       <div class="auth-actions" style="margin-top:14px;">
         <button id="cp-submit-btn" class="primary" onclick="submitChangePassword()" style="width:100%; justify-content:center;">确认修改</button>
+      </div>
+      <div style="text-align:right; margin-top:8px;">
+        <a href="javascript:void(0)" onclick="closeChangePasswordModal(); openForgotPasswordModal();" style="font-size:11.5px; color:var(--text2); text-decoration:underline;">忘记旧密码？改用邮箱重置</a>
       </div>
       <div class="auth-msg" id="cp-msg" style="margin-top:10px;"></div>
     </div>
@@ -7692,7 +7697,9 @@ async function submitChangePassword() {
 // ── 忘记密码：第一步，发送重置邮件 ──
 function openForgotPasswordModal() {
   if (!supabaseClient) { toast('尚未配置 Supabase，无法使用邮箱找回功能'); return; }
-  document.getElementById('fp-email').value = document.getElementById('auth-email').value.trim() || '';
+  const cpEmail = document.getElementById('cp-email').value.trim();
+  const loginEmail = document.getElementById('auth-email').value.trim();
+  document.getElementById('fp-email').value = cpEmail || loginEmail || '';
   const msgEl = document.getElementById('fp-msg');
   msgEl.textContent = '';
   msgEl.classList.remove('ok');
