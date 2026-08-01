@@ -1601,6 +1601,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
     <div class="mobile-sheet-row" onclick="closeMoreSheet(); document.getElementById('import-file').click();"><span><i class="fa-solid fa-file-import"></i>&nbsp; 导入合并数据</span><i class="fa-solid fa-chevron-right" style="font-size:10px;"></i></div>
     <div class="mobile-sheet-row" onclick="closeMoreSheet(); exportData();"><span><i class="fa-solid fa-file-export"></i>&nbsp; 导出存档</span><i class="fa-solid fa-chevron-right" style="font-size:10px;"></i></div>
     <div class="mobile-sheet-row"><span><i class="fa-solid fa-cloud"></i>&nbsp; 云同步状态</span><span id="mobile-sheet-sync-text" style="font-family:var(--mono); font-size:11px; color:var(--text3);">未连接</span></div>
+    <div class="mobile-sheet-row" onclick="closeMoreSheet(); openChangePasswordModal();"><span><i class="fa-solid fa-key"></i>&nbsp; 修改密码</span><i class="fa-solid fa-chevron-right" style="font-size:10px;"></i></div>
     <div class="mobile-sheet-row danger" onclick="closeMoreSheet(); authSignOut();"><span><i class="fa-solid fa-right-from-bracket"></i>&nbsp; 退出登录</span></div>
   </div>
 </div>
@@ -1683,6 +1684,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
             <div style="border-top:1px solid var(--border); padding-top:10px; display:flex; flex-direction:column; gap:8px;">
                 <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" style="width:100%; justify-content:flex-start; font-size:12px; padding:8px 10px;"><i class="fa-solid fa-file-import"></i>&nbsp; 导入合并数据</button>
                 <button class="btn btn-ghost" onclick="exportData()" style="width:100%; justify-content:flex-start; font-size:12px; padding:8px 10px;"><i class="fa-solid fa-file-export"></i>&nbsp; 导出存档</button>
+                <button class="btn btn-ghost" onclick="openChangePasswordModal()" style="width:100%; justify-content:flex-start; font-size:12px; padding:8px 10px;"><i class="fa-solid fa-key"></i>&nbsp; 修改密码</button>
                 <button class="btn btn-ghost" onclick="authSignOut()" style="width:100%; justify-content:flex-start; font-size:12px; padding:8px 10px; color:var(--red); border-color:rgba(251, 113, 133,0.3);"><i class="fa-solid fa-right-from-bracket"></i>&nbsp; 退出登录</button>
             </div>
         </div>
@@ -2505,6 +2507,27 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
     <div class="popup-body" style="display: block; padding: 24px 28px; max-height: 60vh; overflow-y: auto;">
       <div class="cl-list" id="app-changelog-list">
         </div>
+    </div>
+  </div>
+</div>
+
+<!-- 修改密码弹窗 -->
+<div class="popup-overlay" id="change-password-modal" onclick="if(event.target===this) closeChangePasswordModal()">
+  <div class="popup-box" style="max-width: 420px;">
+    <button class="popup-close-float" onclick="closeChangePasswordModal()"><i class="fa-solid fa-xmark"></i></button>
+    <div class="popup-header" style="padding: 20px 28px;">
+      <div class="popup-title"><i class="fa-solid fa-key"></i> 修改密码</div>
+      <div class="popup-subtitle" style="margin-top: 4px;">需先验证邮箱与旧密码</div>
+    </div>
+    <div class="popup-body" style="display: block; padding: 20px 28px 24px;">
+      <div class="auth-field"><label>邮箱</label><input type="email" id="cp-email" autocomplete="username" readonly style="opacity:0.75; cursor:not-allowed;" /></div>
+      <div class="auth-field"><label>旧密码</label><input type="password" id="cp-old-password" autocomplete="current-password" placeholder="当前密码" /></div>
+      <div class="auth-field"><label>新密码</label><input type="password" id="cp-new-password" autocomplete="new-password" placeholder="至少 6 位" /></div>
+      <div class="auth-field"><label>确认新密码</label><input type="password" id="cp-new-password2" autocomplete="new-password" placeholder="再次输入新密码" /></div>
+      <div class="auth-actions" style="margin-top:14px;">
+        <button id="cp-submit-btn" class="primary" onclick="submitChangePassword()" style="width:100%; justify-content:center;">确认修改</button>
+      </div>
+      <div class="auth-msg" id="cp-msg" style="margin-top:10px;"></div>
     </div>
   </div>
 </div>
@@ -7563,6 +7586,68 @@ async function authSignOut() {
   document.getElementById('auth-email').value = '';
   document.getElementById('auth-password').value = '';
   authShowMsg('');
+}
+
+// ── 修改密码 ──
+function openChangePasswordModal() {
+  if (isGuestMode() || !currentUser) {
+    toast('访客模式无法修改密码，请先登录账号');
+    return;
+  }
+  document.getElementById('cp-email').value = currentUser.email || '';
+  document.getElementById('cp-old-password').value = '';
+  document.getElementById('cp-new-password').value = '';
+  document.getElementById('cp-new-password2').value = '';
+  const msgEl = document.getElementById('cp-msg');
+  msgEl.textContent = '';
+  msgEl.classList.remove('ok');
+  document.getElementById('change-password-modal').classList.add('show');
+}
+
+function closeChangePasswordModal() {
+  document.getElementById('change-password-modal').classList.remove('show');
+}
+
+function cpShowMsg(msg, ok) {
+  const el = document.getElementById('cp-msg');
+  el.textContent = msg;
+  el.classList.toggle('ok', !!ok);
+}
+
+async function submitChangePassword() {
+  if (!supabaseClient || !currentUser) { cpShowMsg('尚未登录，无法修改密码'); return; }
+  const email = document.getElementById('cp-email').value.trim();
+  const oldPassword = document.getElementById('cp-old-password').value;
+  const newPassword = document.getElementById('cp-new-password').value;
+  const newPassword2 = document.getElementById('cp-new-password2').value;
+
+  if (!oldPassword || !newPassword || !newPassword2) { cpShowMsg('请填写完整信息'); return; }
+  if (newPassword.length < 6) { cpShowMsg('新密码至少需要 6 位'); return; }
+  if (newPassword !== newPassword2) { cpShowMsg('两次输入的新密码不一致'); return; }
+  if (newPassword === oldPassword) { cpShowMsg('新密码不能与旧密码相同'); return; }
+
+  const submitBtn = document.getElementById('cp-submit-btn');
+  submitBtn.disabled = true;
+  cpShowMsg('验证旧密码中…');
+
+  // 第一步：用邮箱 + 旧密码重新验证身份（Supabase 没有单独的"校验密码"接口，
+  // 复用登录接口来确认旧密码是否正确，验证通过后当前登录态仍然有效）
+  const { error: verifyError } = await supabaseClient.auth.signInWithPassword({ email, password: oldPassword });
+  if (verifyError) {
+    submitBtn.disabled = false;
+    cpShowMsg('旧密码不正确，请重新输入');
+    return;
+  }
+
+  // 第二步：旧密码验证通过后，更新为新密码
+  cpShowMsg('正在修改密码…');
+  const { error: updateError } = await supabaseClient.auth.updateUser({ password: newPassword });
+  submitBtn.disabled = false;
+  if (updateError) { cpShowMsg(updateError.message); return; }
+
+  cpShowMsg('密码修改成功！', true);
+  toast('密码已修改，下次请使用新密码登录');
+  setTimeout(closeChangePasswordModal, 1200);
 }
 
 async function onAuthSuccess(user) {
