@@ -1108,11 +1108,31 @@ html.strip-theme #settings-panel { background: #ede4d3; }
 .hub-spoke { background: var(--bg-input); color: var(--text2); border:1px solid var(--border); }
 
 /* ── Airport Info Popup ── */
-.airport-popup-box { max-width: 460px; width:100%; }
-.airport-hero { padding: 26px 64px 18px 64px; background: linear-gradient(135deg, var(--bg-hover) 0%, var(--bg-input) 100%); border-bottom: 1px solid var(--glass-border); position: relative; overflow: hidden; }
+.airport-popup-box { max-width: 560px; width:100%; }
+.airport-hero { padding: 22px 30px 18px 30px; background: linear-gradient(135deg, var(--bg-hover) 0%, var(--bg-input) 100%); border-bottom: 1px solid var(--glass-border); position: relative; overflow: hidden; }
 .airport-hero .bg-plane-ico { position:absolute; right:-14px; bottom:-24px; font-size:100px; color:var(--text1); opacity:0.04; transform:rotate(-15deg); }
-.airport-code-big { font-size:38px; font-weight:700; font-family:var(--mono); color:var(--text1); line-height:1; letter-spacing:0.02em; position:relative; z-index:1; }
-.airport-name-sub { font-size:13px; color:var(--text2); margin-top:8px; display:flex; align-items:center; gap:6px; position:relative; z-index:1; }
+.airport-hero-top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; position:relative; z-index:1; }
+.airport-hero-id { min-width:0; padding-right:56px; transition: padding-left var(--transition); }
+.airport-popup-box.has-back .airport-hero-id { padding-left: 42px; }
+.airport-code-big { font-size:38px; font-weight:700; font-family:var(--mono); color:var(--text1); line-height:1; letter-spacing:0.02em; }
+.airport-name-sub { font-size:13px; color:var(--text2); margin-top:8px; display:flex; align-items:center; gap:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.airport-hub-tag-float { position:absolute; top:24px; right:60px; z-index:100; }
+
+/* 天气+当地时间：与机场代码/全名同排，置于hero右上方 */
+.ap-hero-weather { display:flex; align-items:center; gap:12px; flex-shrink:0; margin-top:34px; }
+.ap-hero-weather-main { display:flex; align-items:center; gap:9px; }
+.ap-hero-weather-icon { font-size:22px; color:var(--cyan); width:26px; text-align:center; flex-shrink:0; }
+.ap-hero-weather-temp { font-size:18px; font-weight:700; font-family:var(--mono); color:var(--text1); line-height:1; white-space:nowrap; }
+.ap-hero-weather-desc { font-size:10px; color:var(--text2); margin-top:4px; white-space:nowrap; }
+.ap-hero-weather-time-box { text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid var(--glass-border); }
+.ap-hero-weather-time { font-size:16px; font-weight:700; font-family:var(--mono); color:var(--purple); line-height:1; }
+.ap-hero-weather-time-label { font-size:8px; color:var(--text3); margin-top:3px; text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap; }
+.ap-hero-weather-loading, .ap-hero-weather-error { font-size:10.5px; color:var(--text3); white-space:nowrap; }
+.ap-hero-weather-error { color:var(--amber); }
+
+.ap-weather-meta { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:16px; padding-top:12px; border-top:1px solid var(--glass-border); font-size:11px; color:var(--text2); position:relative; z-index:1; }
+.ap-weather-meta span i { color:var(--cyan); margin-right:5px; width:12px; text-align:center; }
+
 .airport-stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:18px 26px 4px; }
 .airport-stat-box { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px 8px; text-align:center; }
 .airport-stat-num { font-size:19px; font-weight:700; font-family:var(--mono); color:var(--cyan); }
@@ -1121,6 +1141,7 @@ html.strip-theme #settings-panel { background: #ede4d3; }
 .airport-conn-list { padding: 0 26px 24px; display:flex; flex-wrap:wrap; gap:8px; max-height:170px; overflow-y:auto; }
 .airport-conn-chip { display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:11px; font-weight:600; background:var(--bg-input); border:1px solid var(--border); color:var(--text1); padding:5px 10px; border-radius:20px; cursor:pointer; transition:all 0.15s; }
 .airport-conn-chip:hover { border-color:var(--cyan-dim); color:var(--cyan); background:var(--cyan-glow); transform:translateY(-1px); }
+.airport-conn-dist { font-size:9px; color:var(--text3); font-weight:500; margin-left:1px; }
 
 /* ── Boarding Pass Style Fleet Card ── */
 .boarding-route { display:flex; align-items:center; gap:6px; margin-bottom:10px; }
@@ -2625,22 +2646,26 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
   <div class="popup-box airport-popup-box">
     <button class="popup-close-float" onclick="closeAirportInfo()"><i class="fa-solid fa-xmark"></i></button>
     <button class="popup-back-float" id="btn-airport-back" onclick="goBackAirport()" style="display:none;" title="返回上一级"><i class="fa-solid fa-arrow-left"></i></button>
+    <span class="hub-tag airport-hub-tag-float" id="ap-hub-tag">SPOKE</span>
     <div class="airport-hero">
       <i class="fa-solid fa-tower-broadcast bg-plane-ico"></i>
-      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
-        <div>
+      <div class="airport-hero-top">
+        <div class="airport-hero-id">
           <div class="airport-code-big" id="ap-code">—</div>
           <div class="airport-name-sub"><span id="ap-flag"></span><span id="ap-name">未知机场</span></div>
         </div>
-        <span class="hub-tag" id="ap-hub-tag" style="margin-top:4px;">SPOKE</span>
+        <div class="ap-hero-weather" id="ap-weather-wrap">
+          <div class="ap-hero-weather-loading"><i class="fa-solid fa-spinner fa-spin"></i> 获取天气中…</div>
+        </div>
       </div>
+      <div class="ap-weather-meta" id="ap-weather-meta"></div>
     </div>
     <div class="airport-stats-row">
       <div class="airport-stat-box"><div class="airport-stat-num" id="ap-stat-base">0</div><div class="airport-stat-label"><i class="fa-solid fa-plane-departure"></i> 作为基地</div></div>
       <div class="airport-stat-box"><div class="airport-stat-num" id="ap-stat-dest">0</div><div class="airport-stat-label"><i class="fa-solid fa-plane-arrival"></i> 作为目的地</div></div>
       <div class="airport-stat-box"><div class="airport-stat-num" id="ap-stat-conn">0</div><div class="airport-stat-label"><i class="fa-solid fa-route"></i> 通航机场数</div></div>
     </div>
-    <div class="airport-conn-head"><i class="fa-solid fa-diagram-project"></i> 通航连接（点击跳转）</div>
+    <div class="airport-conn-head"><i class="fa-solid fa-diagram-project"></i> 通航连接（点击跳转・附直线距离）</div>
     <div class="airport-conn-list" id="ap-conn-list"></div>
   </div>
 </div>
@@ -2759,6 +2784,143 @@ function updateCityName(inputId, labelId) {
 }
 
 // ═══════════════════════════════════════════════
+// 大圆距离计算（Haversine，纯经纬度计算，无需额外数据源）
+// ═══════════════════════════════════════════════
+function haversineDistanceKm(lat1, lon1, lat2, lon2) {
+    if ([lat1, lon1, lat2, lon2].some(v => typeof v !== 'number' || isNaN(v))) return null;
+    const R = 6371; // 地球平均半径 (km)
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const sa = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * (2 * Math.atan2(Math.sqrt(sa), Math.sqrt(1 - sa)));
+}
+function formatDistanceKm(km) {
+    if (km == null || isNaN(km)) return '';
+    return Math.round(km).toLocaleString() + ' km';
+}
+
+// ═══════════════════════════════════════════════
+// 当地天气与时间（Open-Meteo，免费・无需 API Key）
+// ═══════════════════════════════════════════════
+const WMO_WEATHER_MAP = {
+    0:  { icon: 'fa-sun',                 desc: '晴朗' },
+    1:  { icon: 'fa-cloud-sun',           desc: '大部晴朗' },
+    2:  { icon: 'fa-cloud-sun',           desc: '局部多云' },
+    3:  { icon: 'fa-cloud',               desc: '阴天' },
+    45: { icon: 'fa-smog',                desc: '有雾' },
+    48: { icon: 'fa-smog',                desc: '雾凇' },
+    51: { icon: 'fa-cloud-rain',          desc: '小毛毛雨' },
+    53: { icon: 'fa-cloud-rain',          desc: '中毛毛雨' },
+    55: { icon: 'fa-cloud-rain',          desc: '大毛毛雨' },
+    56: { icon: 'fa-cloud-rain',          desc: '冻毛毛雨' },
+    57: { icon: 'fa-cloud-rain',          desc: '强冻毛毛雨' },
+    61: { icon: 'fa-cloud-showers-heavy', desc: '小雨' },
+    63: { icon: 'fa-cloud-showers-heavy', desc: '中雨' },
+    65: { icon: 'fa-cloud-showers-heavy', desc: '大雨' },
+    66: { icon: 'fa-cloud-showers-heavy', desc: '冻雨' },
+    67: { icon: 'fa-cloud-showers-heavy', desc: '强冻雨' },
+    71: { icon: 'fa-snowflake',           desc: '小雪' },
+    73: { icon: 'fa-snowflake',           desc: '中雪' },
+    75: { icon: 'fa-snowflake',           desc: '大雪' },
+    77: { icon: 'fa-snowflake',           desc: '米雪' },
+    80: { icon: 'fa-cloud-showers-heavy', desc: '阵雨' },
+    81: { icon: 'fa-cloud-showers-heavy', desc: '中阵雨' },
+    82: { icon: 'fa-cloud-showers-heavy', desc: '强阵雨' },
+    85: { icon: 'fa-snowflake',           desc: '小阵雪' },
+    86: { icon: 'fa-snowflake',           desc: '大阵雪' },
+    95: { icon: 'fa-bolt',                desc: '雷暴' },
+    96: { icon: 'fa-bolt',                desc: '雷暴伴冰雹' },
+    99: { icon: 'fa-bolt',                desc: '强雷暴伴冰雹' }
+};
+function getWeatherInfo(code) { return WMO_WEATHER_MAP[code] || { icon: 'fa-cloud', desc: '天气未知' }; }
+
+const airportWeatherCache = {};           // { CODE: { ts, data } } 简单内存缓存，避免弹窗反复打开时重复请求
+const AP_WEATHER_CACHE_TTL = 10 * 60 * 1000; // 10 分钟
+let apClockTimer = null;                  // 本地时间跳动的定时器
+let apClockOffsetSec = null;              // 当前机场相对 UTC 的偏移秒数
+
+function stopApClock() {
+    if (apClockTimer) { clearInterval(apClockTimer); apClockTimer = null; }
+    apClockOffsetSec = null;
+}
+function renderApClock() {
+    if (apClockOffsetSec == null) return;
+    const el = document.getElementById('ap-weather-time');
+    if (!el) { stopApClock(); return; }
+    const d = new Date(Date.now() + apClockOffsetSec * 1000);
+    el.textContent = `${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`;
+}
+function startApClock(offsetSec) {
+    stopApClock();
+    apClockOffsetSec = offsetSec || 0;
+    renderApClock();
+    apClockTimer = setInterval(renderApClock, 15000);
+}
+
+function renderAirportWeather(wrap, meta, data) {
+    const cur = data.current || {};
+    const wInfo = getWeatherInfo(cur.weather_code);
+    // 从 hourly.visibility 中找到与 current.time 对应小时的能见度（Open-Meteo 的 current 不直接提供能见度）
+    let visibilityKm = null;
+    try {
+        const idx = data.hourly.time.indexOf(cur.time.slice(0, 13) + ':00');
+        if (idx >= 0 && data.hourly.visibility[idx] != null) visibilityKm = data.hourly.visibility[idx] / 1000;
+    } catch (e) { /* 忽略解析失败，能见度留空 */ }
+
+    wrap.innerHTML = `
+      <div class="ap-hero-weather-main">
+        <i class="fa-solid ${wInfo.icon} ap-hero-weather-icon"></i>
+        <div>
+          <div class="ap-hero-weather-temp">${Math.round(cur.temperature_2m)}°C</div>
+          <div class="ap-hero-weather-desc">${wInfo.desc} · 体感 ${Math.round(cur.apparent_temperature)}°C</div>
+        </div>
+      </div>
+      <div class="ap-hero-weather-time-box">
+        <div class="ap-hero-weather-time" id="ap-weather-time">--:--</div>
+        <div class="ap-hero-weather-time-label">当地时间</div>
+      </div>`;
+    if (meta) {
+        meta.innerHTML = `
+          <span><i class="fa-solid fa-wind"></i> 风速 ${Math.round(cur.wind_speed_10m)} km/h</span>
+          <span><i class="fa-solid fa-compass"></i> 风向 ${Math.round(cur.wind_direction_10m)}°</span>
+          ${visibilityKm != null ? `<span><i class="fa-solid fa-eye"></i> 能见度 ${visibilityKm.toFixed(1)} km</span>` : ''}`;
+    }
+    startApClock(data.utc_offset_seconds);
+}
+
+async function loadAirportWeather(code, lat, lon) {
+    const wrap = document.getElementById('ap-weather-wrap');
+    const meta = document.getElementById('ap-weather-meta');
+    if (!wrap) return;
+    stopApClock();
+    if (meta) meta.innerHTML = '';
+    if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) {
+        wrap.innerHTML = `<div class="ap-hero-weather-error"><i class="fa-solid fa-triangle-exclamation"></i> 暂无坐标，无法获取天气</div>`;
+        return;
+    }
+    const cached = airportWeatherCache[code];
+    if (cached && (Date.now() - cached.ts) < AP_WEATHER_CACHE_TTL) {
+        renderAirportWeather(wrap, meta, cached.data);
+        return;
+    }
+    wrap.innerHTML = `<div class="ap-hero-weather-loading"><i class="fa-solid fa-spinner fa-spin"></i> 获取天气中…</div>`;
+    try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m&hourly=visibility&timezone=auto&forecast_days=1`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('天气请求失败');
+        const data = await res.json();
+        airportWeatherCache[code] = { ts: Date.now(), data };
+        // 用户可能已经切到另一个机场了，此时旧请求的结果不应该覆盖当前界面
+        if (currentViewedAirport === code) renderAirportWeather(wrap, meta, data);
+    } catch (e) {
+        if (currentViewedAirport === code) {
+            wrap.innerHTML = `<div class="ap-hero-weather-error"><i class="fa-solid fa-triangle-exclamation"></i> 天气获取失败</div>`;
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════
 // AIRPORT INFO / HUB STATS
 // ═══════════════════════════════════════════════
 function getAirportStats(code) {
@@ -2802,7 +2964,7 @@ function openAirportInfo(code, isBack = false) {
     document.getElementById('ap-name').textContent = info ? `${info.name} · ${info.country}` : '未匹配到机场全名';
     document.getElementById('ap-flag').innerHTML = info ? getFlagImg(info) : '';
     const tagEl = document.getElementById('ap-hub-tag');
-    tagEl.className = `hub-tag hub-${stats.tier}`;
+    tagEl.className = `hub-tag airport-hub-tag-float hub-${stats.tier}`;
     tagEl.textContent = stats.tierLabel;
 
     document.getElementById('ap-stat-base').textContent = stats.asBase;
@@ -2814,16 +2976,28 @@ function openAirportInfo(code, isBack = false) {
         connList.innerHTML = stats.connections.map(c => {
             const cInfo = getCityInfo(c);
             const flag = cInfo ? getFlagImg(cInfo) : '';
-            return `<span class="airport-conn-chip" onclick="openAirportInfo('${c}')">${flag}${c}</span>`;
+            let distHtml = '';
+            if (info && typeof info.lat === 'number' && typeof info.lon === 'number' && cInfo && typeof cInfo.lat === 'number' && typeof cInfo.lon === 'number') {
+                const km = haversineDistanceKm(info.lat, info.lon, cInfo.lat, cInfo.lon);
+                if (km != null) distHtml = ` <span class="airport-conn-dist">${formatDistanceKm(km)}</span>`;
+            }
+            return `<span class="airport-conn-chip" onclick="openAirportInfo('${c}')">${flag}${c}${distHtml}</span>`;
         }).join('');
     } else {
         connList.innerHTML = `<div style="font-size:12px; color:var(--text3); padding:8px 0;">暂无关联航线记录</div>`;
     }
 
+    // 当地天气与时间：需要外部免费数据源（Open-Meteo，无需 API Key）
+    loadAirportWeather(clean, info ? info.lat : null, info ? info.lon : null);
+
     // 控制返回按钮的显示与隐藏
     const backBtn = document.getElementById('btn-airport-back');
     if (backBtn) {
         backBtn.style.display = airportHistoryStack.length > 0 ? 'flex' : 'none';
+    }
+    const popupBoxEl = popup.querySelector('.popup-box');
+    if (popupBoxEl) {
+        popupBoxEl.classList.toggle('has-back', airportHistoryStack.length > 0);
     }
 
     popup.classList.add('show');
@@ -2838,6 +3012,7 @@ function goBackAirport() {
 
 function closeAirportInfo() { 
     document.getElementById('airport-popup').classList.remove('show'); 
+    stopApClock();
     // 关闭弹窗时，彻底清空历史记忆
     airportHistoryStack = [];
     currentViewedAirport = null;
