@@ -1524,6 +1524,9 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         <button id="auth-btn-signup" onclick="authSignUp()">注册新账号</button>
       </div>
       <div class="auth-msg" id="auth-msg"></div>
+      <div style="text-align:right; margin-top:6px;">
+        <a href="javascript:void(0)" onclick="openForgotPasswordModal()" style="font-size:11.5px; color:var(--text2); text-decoration:underline;">忘记密码？</a>
+      </div>
       <div class="auth-switch">在电脑和平板上使用<b>同一个账号</b>登录，即可自动共享全部数据</div>
 
       <div style="display:flex; align-items:center; gap:10px; margin:16px 0 12px;">
@@ -2528,6 +2531,42 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         <button id="cp-submit-btn" class="primary" onclick="submitChangePassword()" style="width:100%; justify-content:center;">确认修改</button>
       </div>
       <div class="auth-msg" id="cp-msg" style="margin-top:10px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 忘记密码：第一步，发送重置邮件 -->
+<div class="popup-overlay" id="forgot-password-modal" onclick="if(event.target===this) closeForgotPasswordModal()">
+  <div class="popup-box" style="max-width: 420px;">
+    <button class="popup-close-float" onclick="closeForgotPasswordModal()"><i class="fa-solid fa-xmark"></i></button>
+    <div class="popup-header" style="padding: 20px 28px;">
+      <div class="popup-title"><i class="fa-solid fa-envelope-circle-check"></i> 找回密码</div>
+      <div class="popup-subtitle" style="margin-top: 4px;">我们会向该邮箱发送一封重置密码邮件</div>
+    </div>
+    <div class="popup-body" style="display: block; padding: 20px 28px 24px;">
+      <div class="auth-field"><label>邮箱</label><input type="email" id="fp-email" autocomplete="username" placeholder="you@example.com" /></div>
+      <div class="auth-actions" style="margin-top:14px;">
+        <button id="fp-submit-btn" class="primary" onclick="submitForgotPassword()" style="width:100%; justify-content:center;">发送重置邮件</button>
+      </div>
+      <div class="auth-msg" id="fp-msg" style="margin-top:10px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 忘记密码：第二步，用户点击邮件中的链接返回本站后，设置新密码 -->
+<div class="popup-overlay" id="reset-password-modal">
+  <div class="popup-box" style="max-width: 420px;">
+    <div class="popup-header" style="padding: 20px 28px;">
+      <div class="popup-title"><i class="fa-solid fa-key"></i> 设置新密码</div>
+      <div class="popup-subtitle" style="margin-top: 4px;">邮箱身份已通过重置链接验证</div>
+    </div>
+    <div class="popup-body" style="display: block; padding: 20px 28px 24px;">
+      <div class="auth-field"><label>新密码</label><input type="password" id="rp-new-password" autocomplete="new-password" placeholder="至少 6 位" /></div>
+      <div class="auth-field"><label>确认新密码</label><input type="password" id="rp-new-password2" autocomplete="new-password" placeholder="再次输入新密码" /></div>
+      <div class="auth-actions" style="margin-top:14px;">
+        <button id="rp-submit-btn" class="primary" onclick="submitResetPassword()" style="width:100%; justify-content:center;">确认设置</button>
+      </div>
+      <div class="auth-msg" id="rp-msg" style="margin-top:10px;"></div>
     </div>
   </div>
 </div>
@@ -7650,6 +7689,70 @@ async function submitChangePassword() {
   setTimeout(closeChangePasswordModal, 1200);
 }
 
+// ── 忘记密码：第一步，发送重置邮件 ──
+function openForgotPasswordModal() {
+  if (!supabaseClient) { toast('尚未配置 Supabase，无法使用邮箱找回功能'); return; }
+  document.getElementById('fp-email').value = document.getElementById('auth-email').value.trim() || '';
+  const msgEl = document.getElementById('fp-msg');
+  msgEl.textContent = '';
+  msgEl.classList.remove('ok');
+  document.getElementById('forgot-password-modal').classList.add('show');
+}
+
+function closeForgotPasswordModal() {
+  document.getElementById('forgot-password-modal').classList.remove('show');
+}
+
+function fpShowMsg(msg, ok) {
+  const el = document.getElementById('fp-msg');
+  el.textContent = msg;
+  el.classList.toggle('ok', !!ok);
+}
+
+async function submitForgotPassword() {
+  const email = document.getElementById('fp-email').value.trim();
+  if (!email) { fpShowMsg('请输入邮箱'); return; }
+  const btn = document.getElementById('fp-submit-btn');
+  btn.disabled = true;
+  fpShowMsg('发送中…');
+  // redirectTo 指回当前页面，用户点击邮件里的链接后会带着一次性恢复令牌跳回这里
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  btn.disabled = false;
+  if (error) { fpShowMsg(error.message); return; }
+  // 出于安全考虑，不论该邮箱是否已注册，都统一提示同样的成功信息，避免被用来批量探测已注册邮箱
+  fpShowMsg('如果该邮箱已注册，重置邮件已发送，请查收（含垃圾邮件箱）', true);
+}
+
+// ── 忘记密码：第二步，用户从邮件链接返回后设置新密码 ──
+function rpShowMsg(msg, ok) {
+  const el = document.getElementById('rp-msg');
+  el.textContent = msg;
+  el.classList.toggle('ok', !!ok);
+}
+
+async function submitResetPassword() {
+  const newPassword = document.getElementById('rp-new-password').value;
+  const newPassword2 = document.getElementById('rp-new-password2').value;
+  if (!newPassword || !newPassword2) { rpShowMsg('请填写完整信息'); return; }
+  if (newPassword.length < 6) { rpShowMsg('新密码至少需要 6 位'); return; }
+  if (newPassword !== newPassword2) { rpShowMsg('两次输入的新密码不一致'); return; }
+
+  const btn = document.getElementById('rp-submit-btn');
+  btn.disabled = true;
+  rpShowMsg('正在设置新密码…');
+  // 此时 Supabase 已凭借邮件中的一次性恢复令牌建立了临时会话，
+  // 不需要旧密码即可调用 updateUser 修改密码
+  const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+  btn.disabled = false;
+  if (error) { rpShowMsg(error.message); return; }
+
+  rpShowMsg('密码已重置！正在进入应用…', true);
+  document.getElementById('reset-password-modal').classList.remove('show');
+  toast('密码已重置，下次请使用新密码登录');
+}
+
 async function onAuthSuccess(user) {
   localStorage.removeItem('woa_guest_mode');
   currentUser = user;
@@ -7684,11 +7787,19 @@ async function initAuth() {
   if (session && session.user) {
     await onAuthSuccess(session.user);
   }
-  // 监听登录状态变化（例如另一个标签页登出）
+  // 监听登录状态变化（例如另一个标签页登出，或用户点击了邮件里的密码重置链接）
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
       currentUser = null;
       document.getElementById('auth-overlay').classList.remove('hidden');
+    }
+    if (event === 'PASSWORD_RECOVERY') {
+      // 用户是从重置邮件里的链接跳回来的：Supabase 已用一次性令牌建立临时会话，
+      // 直接弹出"设置新密码"窗口，跳过邮箱验证码 / 旧密码的校验
+      document.getElementById('rp-msg').textContent = '';
+      document.getElementById('rp-new-password').value = '';
+      document.getElementById('rp-new-password2').value = '';
+      document.getElementById('reset-password-modal').classList.add('show');
     }
   });
 }
