@@ -2477,6 +2477,22 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
   </div>
 </div>
 
+<div class="popup-overlay" id="route-change-warn-modal" onclick="if(event.target===this) closeRouteChangeWarn()">
+  <div class="popup-box" style="max-width: 480px;">
+    <button class="popup-close-float" onclick="closeRouteChangeWarn()"><i class="fa-solid fa-xmark"></i></button>
+    <div class="popup-header" style="padding: 24px 28px 16px 28px;">
+      <div class="popup-title" style="color: var(--amber); display:flex; align-items:center; gap:10px;"><i class="fa-solid fa-route"></i> 累计总距离似乎还没更新</div>
+    </div>
+    <div class="popup-body" style="display:block; padding: 0 28px 24px 28px;">
+      <div id="route-change-warn-text" style="font-size: 13px; color: var(--text2); line-height: 1.6;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:22px;">
+        <button class="btn btn-ghost" onclick="goUpdateMileageBeforeRouteChange()">返回先更新里程</button>
+        <button class="btn btn-primary" onclick="confirmRouteChangeAnyway()">仍然继续切换</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="popup-overlay" id="quick-dist-modal" onclick="if(event.target===this) closeQuickDistModal()">
   <div class="popup-box" style="max-width: 640px;">
     <button class="popup-close-float" onclick="closeQuickDistModal()"><i class="fa-solid fa-xmark"></i></button>
@@ -3927,7 +3943,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const idx = fleet.findIndex(a => (a.reg || '').toUpperCase() === reg);
         if (idx < 0) { toast(`未找到注册号为 ${reg} 的飞机`, true); return; }
         const oldVal = fleet[idx].totalDist;
-        fleet[idx].totalDist = parseInt(distVal);
+        if (typeof bankMileageUpdate === 'function') bankMileageUpdate(idx, parseInt(distVal));
+        else fleet[idx].totalDist = parseInt(distVal);
         fleet[idx].updatedAt = new Date().toISOString();
         fleet[idx].changelog = fleet[idx].changelog || [];
         fleet[idx].changelog.unshift({ time: new Date().toISOString(), changes: [`<strong>累计总距离</strong>: ${oldVal || '空'} ➔ ${distVal}（极速更新）`] });
@@ -3977,7 +3994,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const idx = fleet.findIndex(a => a.id === match.id);
             if (idx < 0) { skipped++; return; }
             const oldVal = fleet[idx].totalDist;
-            fleet[idx].totalDist = distNum;
+            if (typeof bankMileageUpdate === 'function') bankMileageUpdate(idx, distNum);
+            else fleet[idx].totalDist = distNum;
             fleet[idx].updatedAt = new Date().toISOString();
             fleet[idx].changelog = fleet[idx].changelog || [];
             fleet[idx].changelog.unshift({ time: new Date().toISOString(), changes: [`<strong>累计总距离</strong>: ${oldVal || '空'} ➔ ${distNum}（OCR批量更新）`] });
@@ -4885,12 +4903,7 @@ function renderRoi() {
         const dbInfo = DB.find(d => d.icao === a.icao);
         const price = dbInfo ? dbInfo.price : 0;
 
-        const totalDist = parseInt(a.totalDist) || 0;
-        const oneWayDist = parseInt(a.dist) || 0;
-        let flightCount = 0;
-        if (oneWayDist > 0) flightCount = Math.floor(totalDist / (oneWayDist * 2));
-
-        const totalEarned = flightCount * singleTripProfit;
+        const { flightCount, totalEarned } = getAcEarningsInfo(a, singleTripProfit);
         let progress = 0;
         let isRecovered = false;
 
@@ -5766,17 +5779,80 @@ function routeMatchesAc(r, reg, icao) {
 }
 function getAcProfit(reg, icao) { return routes.filter(r => routeMatchesAc(r, reg, icao)).reduce((sum, r) => sum + r.profit, 0); }
 
+// ═══════════════════════════════════════════════
+// 里程结算账本（Mileage Settlement Ledger）
+// ---------------------------------------------------
+// 背景：飞机的「累计总距离(totalDist)」是终身里程表，不会因为换航线而重置；
+// 但「单程距离(dist)」「单趟利润(profit)」是当前航线的参数，换航线就会变。
+// 如果直接用 totalDist / (当前dist×2) 反推总趟数、再乘当前profit算总收益，
+// 换过航线的飞机历史里程就会被当前航线的参数错误地重新计算一遍。
+//
+// 解法：不再"事后用一套参数囫囵吞枣地反推全部历史"，而是分段记账——
+// 飞机身上额外持久化三个字段：
+//   earnedBanked   已经结算入账、永久保留的历史收益（不随换航线清零）
+//   bankedFlights  已经结算入账的历史趟数
+//   bankedDist     上一次结算时的 totalDist 锚点
+// 每次保存飞机资料（proceedSaveAircraft）时，都会把"锚点→本次填写的totalDist"
+// 这一段里程，用【当时仍然生效的】单程距离和单趟利润换算成收益/趟数，
+// 累加进账本，再把锚点推进。换航线时会强制把锚点对齐到当前 totalDist
+// （snapToEnd=true，零头作废），避免旧航线的残余里程被新航线的参数误判。
+// ═══════════════════════════════════════════════
+function settleMileageSegment(oneWayDist, profit, totalDist, bankedDist, snapToEnd) {
+    oneWayDist = parseInt(oneWayDist) || 0;
+    totalDist = parseInt(totalDist) || 0;
+    bankedDist = parseInt(bankedDist) || 0;
+    let earnedDelta = 0, flightsDelta = 0, newBankedDist = bankedDist;
+    if (oneWayDist > 0 && totalDist > bankedDist) {
+        flightsDelta = Math.floor((totalDist - bankedDist) / (oneWayDist * 2));
+        if (flightsDelta > 0) {
+            earnedDelta = flightsDelta * profit;
+            newBankedDist = bankedDist + flightsDelta * oneWayDist * 2;
+        }
+    }
+    if (snapToEnd) newBankedDist = Math.max(newBankedDist, totalDist);
+    return { earnedDelta, flightsDelta, newBankedDist };
+}
+
+// 供"极速更新总距离"（单条/OCR批量）调用：这两个入口不经过 proceedSaveAircraft，
+// 不涉及换航线，只是把 totalDist 往前推进，所以直接用飞机自己当前的 dist/profit
+// 结算 bankedDist → newTotalDist 这一段，snapToEnd=false（不足一整趟的零头保留到下次）。
+function bankMileageUpdate(fleetIdx, newTotalDist) {
+  const a = fleet[fleetIdx];
+  if (!a) return;
+  const profit = getAcProfit(a.reg, a.icao);
+  const { earnedDelta, flightsDelta, newBankedDist } = settleMileageSegment(
+      a.dist, profit, newTotalDist, a.bankedDist || 0, false
+  );
+  a.earnedBanked = (a.earnedBanked || 0) + earnedDelta;
+  a.bankedFlights = (a.bankedFlights || 0) + flightsDelta;
+  a.bankedDist = newBankedDist;
+  a.totalDist = newTotalDist;
+}
+
+// 获取某架飞机当前应显示的"总趟数 / 总收益"= 已结算账本 + 当前航线下尚未结算的零头
+function getAcEarningsInfo(a, profitOverride) {
+    const oneWayDist = parseInt(a.dist) || 0;
+    const totalDist = parseInt(a.totalDist) || 0;
+    const bankedDist = parseInt(a.bankedDist) || 0;
+    const bankedFlights = parseInt(a.bankedFlights) || 0;
+    const earnedBanked = a.earnedBanked || 0;
+    const currentProfit = profitOverride !== undefined ? profitOverride : getAcProfit(a.reg || a.icao, a.icao);
+    let unsettledFlights = 0;
+    if (oneWayDist > 0 && totalDist > bankedDist) {
+        unsettledFlights = Math.floor((totalDist - bankedDist) / (oneWayDist * 2));
+    }
+    return {
+        flightCount: bankedFlights + unsettledFlights,
+        totalEarned: earnedBanked + unsettledFlights * currentProfit
+    };
+}
+
 // 计算单机的资产回本进度（%）：totalEarned / price * 100，price 未知时返回 0
 function getAcRoiProgress(a, singleTripProfit) {
     const dbInfo = DB.find(d => d.icao === a.icao);
     const price = dbInfo ? dbInfo.price : 0;
     if (!(price > 0)) return 0;
-    const totalDist = parseInt(a.totalDist) || 0;
-    const oneWayDist = parseInt(a.dist) || 0;
-    let flightCount = 0;
-    if (oneWayDist > 0) flightCount = Math.floor(totalDist / (oneWayDist * 2));
-    const profit = singleTripProfit !== undefined ? singleTripProfit : getAcProfit(a.reg || a.icao, a.icao);
-    const totalEarned = flightCount * profit;
+    const { totalEarned } = getAcEarningsInfo(a, singleTripProfit);
     return (totalEarned / price) * 100;
 }
 function countBy(arr, key) {
@@ -5824,10 +5900,7 @@ function renderAnalytics() {
   let totalCargoTransportedTon = 0;
 
   data.forEach(a => {
-      const oneWayDist = parseInt(a.dist) || 0;
-      const totalDist = parseInt(a.totalDist) || 0;
-      let flightCount = 0;
-      if (oneWayDist > 0) flightCount = Math.floor(totalDist / (oneWayDist * 2));
+      const { flightCount } = getAcEarningsInfo(a);
 
       if (a.load === 'Passenger') {
           const seats = (parseInt(a.first) || 0) + (parseInt(a.biz) || 0) + (parseInt(a.eco) || 0);
@@ -6587,9 +6660,7 @@ function openPopup(id) {
   
   const age = calculateAge(a.inductionDate); 
   const timeStr = (a.flightHrs !== undefined || a.flightMins !== undefined) ? `${a.flightHrs||0}h ${a.flightMins||0}m` : '—';
-  const totalDist = parseInt(a.totalDist) || 0; const oneWayDist = parseInt(a.dist) || 0;
-  let flightCount = 0; if (oneWayDist > 0) flightCount = Math.floor(totalDist / (oneWayDist * 2));
-  const currentTotalRev = flightCount * acProfit;
+  const { flightCount, totalEarned: currentTotalRev } = getAcEarningsInfo(a, acProfit);
 
   let profitClass = acProfit > 0 ? 'profit-pos' : (acProfit < 0 ? 'profit-neg' : '');
   let profitText = acProfit !== 0 ? Math.round(acProfit).toLocaleString() + ' ' + W_ICON : '暂无数据';
@@ -6611,7 +6682,7 @@ function openPopup(id) {
   const dbInfo = DB.find(x => x.icao === a.icao); const price = dbInfo ? dbInfo.price : 0;
   let breakEvenHtml = '';
   if (price > 0 && acProfit > 0) {
-      const targetFlights = Math.ceil(price / acProfit);  const remain = targetFlights - flightCount;
+      const remain = Math.max(0, Math.ceil((price - currentTotalRev) / acProfit));
       if (remain <= 0) breakEvenHtml = `<span style="font-size:12px; margin-left:12px; padding:2px 8px; border-radius:4px; background:var(--green-glow); color:var(--green); border:1px solid rgba(52, 211, 153,0.4); font-weight:600; letter-spacing:0.05em; white-space:nowrap;">已回本 🎉</span>`;
       else breakEvenHtml = `<span style="font-size:12px; margin-left:12px; color:var(--text3); font-weight:normal; white-space:nowrap;">(还需 <span style="color:var(--amber);font-weight:600">${remain}</span> 趟回本)</span>`;
   } else if (price > 0 && acProfit <= 0) { breakEvenHtml = `<span style="font-size:12px; margin-left:12px; color:var(--red); font-weight:normal; white-space:nowrap;">(负收益无法回本)</span>`; }
@@ -6964,12 +7035,56 @@ function saveAircraft() {
     document.getElementById('dup-reg-modal').classList.add('show');
     return;
   }
-  proceedSaveAircraft();
+  runRouteChangeCheckThenSave();
 }
 
 function cancelDupSave() { document.getElementById('dup-reg-modal').classList.remove('show'); }
 
-function confirmDupSave() { document.getElementById('dup-reg-modal').classList.remove('show'); proceedSaveAircraft(); }
+function confirmDupSave() { document.getElementById('dup-reg-modal').classList.remove('show'); runRouteChangeCheckThenSave(); }
+
+// ── 换航线前置检测 ──
+// 编辑一架已有飞机时，如果目的地/单程距离相比原记录发生了变化（=要换航线了），
+// 但「累计总距离」这一栏却和换航线前一模一样 —— 大概率说明用户忘了先把切换前
+// 实际飞出来的里程更新进去。这一步不拦是可以保存的，只是提醒一下，
+// 因为一旦切换，proceedSaveAircraft 会用【切换前】的航线参数把 bankedDist 锚点
+// 强制对齐到本次填写的 totalDist（清算零头），如果这时候 totalDist 还是旧值，
+// 那这一段"忘了更新"的里程就永远无法被正确计入旧航线的收益了。
+function runRouteChangeCheckThenSave() {
+  if (editingId) {
+    const oldAc = fleet.find(a => a.id === editingId);
+    if (oldAc) {
+      const oldDist = String(oldAc.dist || '').trim();
+      const oldDest = String(oldAc.dest || '').trim().toUpperCase();
+      const newDist = document.getElementById('f-dist').value.trim();
+      const newDest = document.getElementById('f-dest').value.trim().toUpperCase();
+      const routeChanged = oldDist && newDist && (oldDist !== newDist || oldDest !== newDest);
+      const totalDistUnchanged = String(oldAc.totalDist || '').trim() === document.getElementById('f-totalDist').value.trim();
+      const hadOldRoute = routes.some(r => routeMatchesAc(r, oldAc.reg, oldAc.icao));
+      if (routeChanged && totalDistUnchanged && hadOldRoute) {
+        document.getElementById('route-change-warn-text').innerHTML =
+          `检测到 <strong style="color:var(--cyan)">${oldAc.reg}</strong> 的航线即将变更（原目的地 <strong>${oldAc.dest || '—'}</strong> · ${oldDist || '—'} nm → 新目的地 <strong>${newDest || '—'}</strong> · ${newDist || '—'} nm）。<br><br>
+          但「累计总距离」还是切换前的旧数值 <strong>${oldAc.totalDist || 0}</strong>，看起来<strong style="color:var(--amber)">还没有把切换航线前实际飞出来的里程更新进去</strong>。<br><br>
+          建议先返回，把「累计总距离」更新为切换航线那一刻的真实读数，再保存切换 —— 这样第一段航线的收益才会被准确计入回本账本，不会在换航线后漏算或丢失。`;
+        document.getElementById('route-change-warn-modal').classList.add('show');
+        return;
+      }
+    }
+  }
+  proceedSaveAircraft();
+}
+
+function closeRouteChangeWarn() { document.getElementById('route-change-warn-modal').classList.remove('show'); }
+
+// 用户选择"返回更新里程"：不保存，聚焦到累计总距离输入框
+function goUpdateMileageBeforeRouteChange() {
+  closeRouteChangeWarn();
+  const el = document.getElementById('f-totalDist');
+  if (el) { el.focus(); el.select(); if (typeof flashField === 'function') flashField('f-totalDist'); }
+  toast('请先填入切换航线前的最新总里程，再保存切换');
+}
+
+// 用户选择"仍然继续切换"：接受这段零头可能算不准，照常保存
+function confirmRouteChangeAnyway() { closeRouteChangeWarn(); proceedSaveAircraft(); }
 
 function proceedSaveAircraft() {
   const icao = document.getElementById('f-icao').value; const reg = document.getElementById('f-reg').value.trim().toUpperCase();
@@ -6992,6 +7107,25 @@ function proceedSaveAircraft() {
       cargoCap: parseInt(document.getElementById('f-cargoCap').value)||0,
       updatedAt: new Date().toISOString() 
   };
+
+  // ── 里程结算账本：先把旧账本状态带过来，再用【切换前仍然生效的航线参数】
+  //    结算 bankedDist → 本次填写的 totalDist 这一段。这一步必须在下面
+  //    routes[existingRouteIdx] 被新航线覆盖之前完成，才能拿到旧的单趟利润。
+  const oldAcForSettle = wasEditing ? fleet.find(a => a.id === editingId) : null;
+  entry.earnedBanked = oldAcForSettle ? (oldAcForSettle.earnedBanked || 0) : 0;
+  entry.bankedFlights = oldAcForSettle ? (oldAcForSettle.bankedFlights || 0) : 0;
+  entry.bankedDist = oldAcForSettle ? (oldAcForSettle.bankedDist || 0) : 0;
+  if (oldAcForSettle && routes.some(r => routeMatchesAc(r, oldAcForSettle.reg, oldAcForSettle.icao))) {
+      const oldProfit = getAcProfit(oldAcForSettle.reg, oldAcForSettle.icao); // routes 此时仍是旧航线记录
+      const routeChanged = String(oldAcForSettle.dist || '').trim() !== String(entry.dist || '').trim()
+                          || String(oldAcForSettle.dest || '').trim().toUpperCase() !== String(entry.dest || '').trim().toUpperCase();
+      const { earnedDelta, flightsDelta, newBankedDist } = settleMileageSegment(
+          oldAcForSettle.dist, oldProfit, entry.totalDist, entry.bankedDist, routeChanged
+      );
+      entry.earnedBanked += earnedDelta;
+      entry.bankedFlights += flightsDelta;
+      entry.bankedDist = newBankedDist;
+  }
 
   const fieldsToTrack = [
       { key: 'reg', name: '注册号' }, { key: 'icao', name: '机型' }, { key: 'base', name: '基地' },
