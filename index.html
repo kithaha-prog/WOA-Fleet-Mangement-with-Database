@@ -1535,6 +1535,84 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 .flightaware-track { stroke-dasharray: 8 10; animation: track-flow 1s linear infinite; }
 @keyframes track-flow { to { stroke-dashoffset: -18; } }
 .hover-map-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); color: var(--green); font-family: var(--mono); font-size: 10px; padding: 4px 8px; border-radius: 4px; z-index: 400; border: 1px solid rgba(52, 211, 153,0.3); backdrop-filter: blur(4px); }
+
+/* ═══════════════════════════════════════════════════════════════
+   手机端专属「浅色卡片」外观层
+   —— 仅在手机宽度(≤700px)生效，电脑端深空极光风格完全不变
+   —— 无论用户在电脑上选了深色/浅色/暖色哪个主题，手机打开时
+      都会统一变成这套白底大圆角卡片 + 底部胶囊导航的风格
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 700px) {
+  html, html.light-theme, html.strip-theme {
+    --bg-deep:    #f3f4f8;
+    --bg-panel:   rgba(255, 255, 255, 0.94);
+    --bg-card:    #ffffff;
+    --bg-hover:   #f6f7fb;
+    --bg-input:   #f0f1f6;
+
+    --border:     rgba(24,24,40,0.06);
+    --border-lit: rgba(24,24,40,0.12);
+    --glass-blur: 22px;
+    --glass-border: rgba(24,24,40,0.05);
+    --glass-border-lit: rgba(24,24,40,0.1);
+    --glass-shadow: 0 10px 26px rgba(24,24,50,0.07);
+    --glass-highlight: none;
+
+    --text1: #1b1d29;
+    --text2: #6d7186;
+    --text3: #a3a7ba;
+
+    --r-sm: 14px;
+    --r-md: 20px;
+    --r-lg: 26px;
+  }
+
+  html body { background: var(--bg-deep); }
+  html body::before { opacity: 0.35; filter: saturate(0.9); }
+
+  /* 顶部栏：改成白色悬浮胶囊感 */
+  .app-topbar {
+    background: rgba(255,255,255,0.92) !important;
+    border-bottom: none !important;
+    box-shadow: 0 2px 14px rgba(24,24,50,0.05);
+  }
+  .topbar-search input, .topbar-coin-chip { background: var(--bg-input) !important; border-color: var(--border) !important; }
+
+  /* 卡片统一大圆角 + 轻投影，去掉玻璃描边质感 */
+  .chart-card, .roi-model-card, .popup-item, .stat-card,
+  .country-period-manager, .mobile-sheet-item, .form-section,
+  .add-side-col, .drawer, .mobile-sheet, .confirm-box {
+    border-radius: var(--r-lg) !important;
+    box-shadow: var(--glass-shadow) !important;
+    border-color: var(--border) !important;
+  }
+  .stat-card { border-radius: var(--r-md) !important; }
+  .mobile-sheet-item { border-radius: var(--r-md) !important; }
+
+  /* 底部导航：改为悬浮白色胶囊，中间保留彩色圆按钮（对齐参考图风格） */
+  .bottom-tabbar {
+    left: 10px; right: 10px; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    background: #ffffff;
+    border: none;
+    border-radius: 26px;
+    box-shadow: 0 12px 30px rgba(24,24,50,0.14);
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+  .main { padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important; }
+  .bottom-nav-item.active { color: var(--cyan); }
+  .bottom-nav-item.bottom-nav-add .bottom-nav-add-icon {
+    box-shadow: 0 8px 18px var(--cyan-glow), inset 0 1px 1px rgba(255,255,255,0.3);
+  }
+
+  /* 筛选栏 / 输入框：浅色描边药丸风格 */
+  .filter-bar input, .filter-bar select,
+  .country-search-wrap, .cpm-row input, .cpm-row select {
+    background: var(--bg-input) !important; border-color: var(--border) !important; border-radius: var(--r-sm) !important;
+  }
+
+  #woa-custom-tooltip { background: rgba(255,255,255,0.97) !important; box-shadow: 0 12px 34px rgba(24,24,50,0.14) !important; }
+  #toast { background: #ffffff !important; box-shadow: 0 10px 30px rgba(24,24,50,0.14) !important; }
+}
 </style>
 </head>
 <body>
