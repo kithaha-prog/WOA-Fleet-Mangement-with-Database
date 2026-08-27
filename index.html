@@ -2798,6 +2798,7 @@ function getCityInfo(code) {
 }
 
 // 获取国旗图标 (通过解析 ISO 代码或匹配国家名)
+// 获取国旗图标 (通过解析 ISO 代码或匹配国家名，使用本地 SVG)
 function getFlagImg(cityInfo) {
     if (!cityInfo) return '';
     let code = cityInfo.iso || cityInfo.countryCode || cityInfo.iso_country;
@@ -2805,7 +2806,7 @@ function getFlagImg(cityInfo) {
         if (cityInfo.country.length === 2 && /^[A-Za-z]+$/.test(cityInfo.country)) {
             code = cityInfo.country;
         } else {
-            // 完整适配了大部分常用国家/地区（涵盖中英文与机场.js对应规则）
+            // 完整适配大部分常用国家/地区（涵盖中英文与机场.js对应规则）
             const exactMap = {
                 'United States': 'us', 'China': 'cn', 'United Kingdom': 'gb', 'Japan': 'jp', 'France': 'fr',
                 'Germany': 'de', 'Russian Federation': 'ru', 'Malaysia': 'my', 'Singapore': 'sg',
@@ -2864,7 +2865,8 @@ function getFlagImg(cityInfo) {
         }
     }
     if (code) {
-        return `<img src="https://flagcdn.com/w20/${code.toLowerCase()}.png" style="width:14px; height:auto; border-radius:2px; margin-right:6px; vertical-align:middle; display:inline-block;" onerror="this.style.display='none'">`;
+        // 改为读取本地 ./flag 文件夹下的二字码 svg 文件
+        return `<img src="./flag/${code.toLowerCase()}.svg" style="width:14px; height:auto; border-radius:2px; margin-right:6px; vertical-align:middle; display:inline-block;" onerror="this.style.display='none'">`;
     }
     return '';
 }
