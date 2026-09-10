@@ -5257,7 +5257,7 @@ function drawSummaryCanvas() {
   const titans = [
     { tag: '🏆 单趟净利之王', reg: profitKing.reg, icao: profitKing.icao, route: `${profitKing.base || '—'} ➔ ${profitKing.dest || '—'}`, val: `+${Math.round(profitKing.profit).toLocaleString()}`, hasIcon: true, sub: '单趟最高净利', col: '#34d399', bg: 'rgba(52, 211, 153, 0.05)' },
     { tag: '⚡ 最高时薪之王', reg: hourlyKing.reg, icao: hourlyKing.icao, route: `${hourlyKing.base || '—'} ➔ ${hourlyKing.dest || '—'}`, val: `${Math.round(hourlyKing.profitHr).toLocaleString()}`, isHourly: true, sub: `${hourlyKing.flightHrs||0}h${hourlyKing.flightMins||0}m 快速周转`, col: '#38bdf8', bg: 'rgba(56, 189, 248, 0.05)' },
-    { tag: '🌍 极光远航之最', reg: rangeKing.reg, icao: rangeKing.icao, route: `${rangeKing.base || '—'} ➔ ${rangeKing.dest || '—'}`, val: `${rangeKing.dist.toLocaleString()} nm`, sub: '最远跨洋航线', col: '#c084fc', bg: 'rgba(192, 132, 252, 0.05)' },
+    { tag: '🌍 极光远航之最', reg: rangeKing.reg, icao: rangeKing.icao, route: `${rangeKing.base || '—'} ➔ ${rangeKing.dest || '—'}`, val: `${rangeKing.dist.toLocaleString()} nm`, sub: '最远航线', col: '#c084fc', bg: 'rgba(192, 132, 252, 0.05)' },
     { tag: '🛩️ 极限穿梭之最', reg: shortestKing.reg, icao: shortestKing.icao, route: `${shortestKing.base || '—'} ➔ ${shortestKing.dest || '—'}`, val: `${shortestKing.dist.toLocaleString()} nm`, sub: '极限短途摆渡', col: '#fb923c', bg: 'rgba(251, 146, 60, 0.05)' },
     { tag: '🛡️ 功勋里程之王', reg: mileageKing.reg, icao: mileageKing.icao, route: `累计执飞 ${mileageKing.flightCount} 趟`, val: `${mileageKing.totalDist ? Number(mileageKing.totalDist).toLocaleString() : '—'} nm`, sub: '终身累计总航程', col: '#f5c15c', bg: 'rgba(245, 193, 92, 0.05)' },
     { tag: '🎖️ 功勋服役元老', reg: oldestVeteran.reg, icao: oldestVeteran.icao, route: `引进于 ${oldestVeteran.inductionDate || '初期'}`, val: oldestAgeStr, sub: '资历最深老兵', col: '#f43f5e', bg: 'rgba(244, 63, 94, 0.05)' }
@@ -6224,6 +6224,7 @@ function renderRoiList() {
 }
 
 // 抽取的单行渲染逻辑，供分页列表与「机型详情」弹窗共用
+// 抽取的单行渲染逻辑，供分页列表与「机型详情」弹窗共用
 function buildRoiRowHtml(a, rankIndex) {
     const isRec = a.isRecovered;
     const progColor = isRec ? 'var(--green)' : (a.progress > 50 ? 'var(--cyan)' : 'var(--amber)');
@@ -6259,14 +6260,12 @@ function buildRoiRowHtml(a, rankIndex) {
             </div>
         </div>
         <div class="roi-progress-col">
-            <!-- 控制栏：已移除横版/竖版切换，仅保留右侧操作 -->
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-            <div style="font-size:12px; color:var(--text3); font-family:var(--mono); display:flex; align-items:center; gap:6px;">
-                <i class="fa-solid fa-circle-check" style="color:var(--green)"></i> 战报长图已自动生成 · 适合手机长屏浏览与全网分享
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; font-family:var(--mono);">
+                <span style="color:var(--text3);">${tripStatusText}</span>
+                <span style="font-weight:700; color:${progColor};">${a.progress.toFixed(1)}%</span>
             </div>
-            <div style="display:flex; gap:10px;">
-                <button class="btn btn-ghost" onclick="copySummaryToClipboard()"><i class="fa-solid fa-copy"></i> 复制到剪贴板</button>
-                <button class="btn btn-primary" onclick="downloadSummaryImage()"><i class="fa-solid fa-download"></i> 保存高清图片</button>
+            <div class="bar-track" style="height:4px; background:var(--bg-input); border:none;">
+                <div class="bar-fill" style="width:${progWidth}%; background:${progColor}; border-radius:4px; box-shadow:0 0 6px ${progColor};"></div>
             </div>
         </div>
         <div class="roi-data-col">
