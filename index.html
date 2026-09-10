@@ -909,7 +909,12 @@ html.strip-theme .coin-card.silver .coin-card-icon { color: #6b5d47; background:
 .ced-chip b { color: var(--cyan); font-weight: 700; }
 .ced-empty { color: var(--text3); font-size: 12px; }
 
-
+/* 总结图控制栏高亮 */
+#summary-modal .btn-ghost.active {
+  background: var(--cyan-glow);
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+}
 
 /* Section Title & Grids */
 .section-label { font-size: 12px; font-weight: 600; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
@@ -1821,9 +1826,14 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
   <main class="main">
     <section class="view active" id="view-analytics">
       <div class="dashboard-top-row">
-        <div class="page-header">
-          <h1><i class="fa-solid fa-satellite-dish"></i>机队分析</h1>
-          <p id="analytics-desc">实时概览您的运营机队</p>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+        <div>
+            <h1><i class="fa-solid fa-satellite-dish"></i>机队分析</h1>
+            <p id="analytics-desc">实时概览您的运营机队</p>
+        </div>
+        <button class="btn btn-primary" onclick="openSummaryModal()" style="box-shadow: 0 4px 14px var(--cyan-glow);">
+            <i class="fa-solid fa-file-image"></i> 生成运营总结图
+        </button>
         </div>
         
         <div class="stat-grid" id="stat-grid"></div>
@@ -2716,6 +2726,37 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         <button id="rp-submit-btn" class="primary" onclick="submitResetPassword()" style="width:100%; justify-content:center;">确认设置</button>
       </div>
       <div class="auth-msg" id="rp-msg" style="margin-top:10px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 总结图生成与导出弹窗 -->
+<div class="popup-overlay" id="summary-modal" onclick="if(event.target===this) closeSummaryModal()">
+  <div class="popup-box" style="max-width: 820px;">
+    <button class="popup-close-float" onclick="closeSummaryModal()"><i class="fa-solid fa-xmark"></i></button>
+    <div class="popup-header" style="padding: 20px 28px;">
+      <div>
+        <div class="popup-title"><i class="fa-solid fa-camera-retro"></i> 生成机队运营总结图</div>
+        <div class="popup-subtitle" style="margin-top: 4px;">自动汇总当前机队资产、财务、评级与航网数据，生成高清战报卡片</div>
+      </div>
+    </div>
+    <div class="popup-body" style="display:flex; flex-direction:column; padding: 20px 28px; gap: 16px;">
+      <!-- 控制栏：选择图表版式与主题 -->
+      <!-- 控制栏：已移除横纵切换按钮，右侧保留复制与保存 -->
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="font-size:12px; color:var(--text3); font-family:var(--mono); display:flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-circle-check" style="color:var(--green)"></i> 运营战报长图已就绪
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-ghost" onclick="copySummaryToClipboard()"><i class="fa-solid fa-copy"></i> 复制到剪贴板</button>
+            <button class="btn btn-primary" onclick="downloadSummaryImage()"><i class="fa-solid fa-download"></i> 保存高清图片</button>
+        </div>
+        </div>
+
+      <!-- 画布容器 -->
+      <div style="display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.25); border-radius:var(--r-md); border:1px solid var(--border); padding:16px; overflow:auto; max-height:60vh;">
+        <canvas id="summaryCanvas" style="max-width:100%; height:auto; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,0.5);"></canvas>
+      </div>
     </div>
   </div>
 </div>
@@ -4691,6 +4732,1081 @@ function formatLargeNum(num) {
 }
 
 // ═══════════════════════════════════════════════
+// SUMMARY CARD / POSTER GENERATOR ENGINE
+// ═══════════════════════════════════════════════
+let currentSummaryType = 'poster'; // 'poster' (竖版长报) | 'card' (横版名片)
+
+// ═══════════════════════════════════════════════════════════════
+// 航空指挥中心 · 高级 HUD 机队战报引擎 (纯长报专属版)
+// ═══════════════════════════════════════════════════════════════
+
+function closeSummaryModal() {
+  document.getElementById('summary-modal').classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════
+// 战报资产图标预加载引擎 (金币/银币/Wollars)
+// ═══════════════════════════════════════════════
+const SUMMARY_ICONS = {};
+
+function loadSummaryIcon(key, pathCandidates) {
+  return new Promise((resolve) => {
+    // 若已成功加载过，直接复用
+    if (SUMMARY_ICONS[key] && SUMMARY_ICONS[key].complete && SUMMARY_ICONS[key].naturalWidth > 0) {
+      return resolve(SUMMARY_ICONS[key]);
+    }
+
+    // 优先尝试从 DOM 中已渲染的 <img> 中提取缓存
+    const domImg = document.querySelector(`img[src*="${key === 'gold' ? 'Gold' : key === 'silver' ? 'liver' : 'Wollars'}"]`);
+    if (domImg && domImg.complete && domImg.naturalWidth > 0) {
+      SUMMARY_ICONS[key] = domImg;
+      return resolve(domImg);
+    }
+
+    const paths = Array.isArray(pathCandidates) ? pathCandidates : [pathCandidates];
+    let idx = 0;
+
+    function tryNext() {
+      if (idx >= paths.length) {
+        console.warn(`[Summary Icon] 未找到图标文件: ${key}`);
+        SUMMARY_ICONS[key] = null;
+        return resolve(null);
+      }
+
+      const img = new Image();
+      // 注意：切勿对本地相对路径设置 crossOrigin = 'anonymous'，否则 file:// 协议会被同源策略拦截
+      img.onload = () => {
+        if (img.naturalWidth > 0) {
+          SUMMARY_ICONS[key] = img;
+          resolve(img);
+        } else {
+          idx++;
+          tryNext();
+        }
+      };
+      img.onerror = () => {
+        idx++;
+        tryNext();
+      };
+      img.src = paths[idx];
+    }
+
+    tryNext();
+  });
+}
+
+async function preloadSummaryIcons() {
+  await Promise.all([
+    loadSummaryIcon('gold', [
+      './logo/Gold_planes.png',
+      'logo/Gold_planes.png',
+      'Gold_planes.png'
+    ]),
+    loadSummaryIcon('silver', [
+      './logo/Sliver_planes.png', // 优先匹配实际文件名 Sliver
+      './logo/Silver_planes.png',
+      'logo/Sliver_planes.png',
+      'logo/Silver_planes.png'
+    ]),
+    loadSummaryIcon('wollars', [
+      './logo/Wollars.png',
+      'logo/Wollars.png',
+      'Wollars.png'
+    ])
+  ]);
+}
+
+// 绘制图标：若图片加载成功则绘制圆形裁切图标；若加载失败则绘制微拟态徽章兜底，不留白
+function drawSummaryIconImg(ctx, key, x, y, size = 16) {
+  const img = SUMMARY_ICONS[key];
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(img, x, y, size, size);
+    ctx.restore();
+  } else {
+    // 兜底绘制小圆标，防止图标资源未找到时界面排版崩坏
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+    ctx.fillStyle = key === 'gold' ? '#f5c15c' : key === 'silver' ? '#cbd5e1' : '#38bdf8';
+    ctx.fill();
+    ctx.fillStyle = '#080c18';
+    ctx.font = `bold ${Math.round(size * 0.65)}px "Inter Tight", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(key === 'gold' ? 'G' : key === 'silver' ? 'S' : 'W', x + size / 2, y + size / 2);
+    ctx.restore();
+  }
+}
+
+async function openSummaryModal() {
+  document.getElementById('summary-modal').classList.add('show');
+  await preloadSummaryIcons();
+  drawSummaryCanvas();
+}
+
+function drawSummaryCanvas() {
+  const canvas = document.getElementById('summaryCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  // 固定为专属长报尺寸 (880 × 1260)
+  const width = 880;
+  const height = 1260;
+  const scale = 2; // 2x Retina 超采样
+
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  ctx.scale(scale, scale);
+
+  // ──────────────────────────────────────────
+  // 1. 全局数据挖掘与统计
+  // ──────────────────────────────────────────
+  const totalAc = fleet.length;
+  if (totalAc === 0) {
+    ctx.fillStyle = '#0a0e1a';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('机队数据为空，请先录入飞机后再生成战报', width / 2, height / 2);
+    return;
+  }
+
+  const paxAc = fleet.filter(a => a.load === 'Passenger').length;
+  const cargoAc = fleet.filter(a => a.load === 'Cargo').length;
+
+  let totalTripProfit = 0;
+  let totalCumulativeEarned = 0;
+  let totalMaintPoints = 0;
+  let totalFleetFlightHours = 0;
+  let recoveredCount = 0;
+  let totalPaxTrans = 0;
+  let totalCargoTrans = 0;
+
+  const ratingCounts = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+  const sizeCounts = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, G: 0 };
+
+  const sizeAvgs = {};
+  fleet.forEach(a => {
+    const p = getAcProfit(a.reg || a.icao, a.icao);
+    if (p > 0) {
+      if (!sizeAvgs[a.size]) sizeAvgs[a.size] = { sum: 0, count: 0 };
+      sizeAvgs[a.size].sum += p;
+      sizeAvgs[a.size].count++;
+    }
+  });
+  Object.keys(sizeAvgs).forEach(s => sizeAvgs[s].avg = sizeAvgs[s].sum / sizeAvgs[s].count);
+
+  const enhancedFleet = fleet.map(a => {
+    const profit = getAcProfit(a.reg || a.icao, a.icao);
+    const flightHrs = parseInt(a.flightHrs) || 0;
+    const flightMins = parseInt(a.flightMins) || 0;
+    const totalHrs = flightHrs + (flightMins / 60);
+    const profitHr = totalHrs > 0 ? profit / totalHrs : 0;
+    const dist = parseInt(a.dist) || 0;
+    const totalDist = parseInt(a.totalDist) || 0;
+    const maint = parseFloat(a.maint) || 0;
+
+    totalTripProfit += profit;
+    totalMaintPoints += maint;
+    totalFleetFlightHours += totalHrs;
+
+    if (a.size && sizeCounts[a.size] !== undefined) sizeCounts[a.size]++;
+
+    const dbInfo = (typeof DB !== 'undefined') ? DB.find(d => d.icao === a.icao) : null;
+    const price = dbInfo ? dbInfo.price : 0;
+    const { flightCount, totalEarned } = getAcEarningsInfo(a, profit);
+    totalCumulativeEarned += totalEarned;
+
+    if (price > 0 && totalEarned >= price) recoveredCount++;
+
+    if (a.load === 'Passenger') {
+      const seats = (parseInt(a.first) || 0) + (parseInt(a.biz) || 0) + (parseInt(a.eco) || 0);
+      totalPaxTrans += flightCount * 0.94 * seats;
+    } else {
+      const cap = parseInt(a.cargoCap) || 0;
+      totalCargoTrans += (flightCount * 0.94 * cap) / 1000;
+    }
+
+    const avg = sizeAvgs[a.size] ? sizeAvgs[a.size].avg : 0;
+    const vsAvgPct = avg > 0 ? ((profit - avg) / avg) * 100 : 0;
+    const rating = getAircraftRating(profit, vsAvgPct);
+    ratingCounts[rating.tier] = (ratingCounts[rating.tier] || 0) + 1;
+
+    return { ...a, profit, profitHr, dist, totalDist, totalEarned, price, rating: rating.tier, flightCount, maint };
+  });
+
+  const profitKing  = [...enhancedFleet].sort((a, b) => b.profit - a.profit)[0] || enhancedFleet[0];
+  const hourlyKing  = [...enhancedFleet].sort((a, b) => b.profitHr - a.profitHr)[0] || enhancedFleet[0];
+  const rangeKing   = [...enhancedFleet].sort((a, b) => b.dist - a.dist)[0] || enhancedFleet[0];
+  const validDistList = enhancedFleet.filter(a => a.dist > 0).sort((a, b) => a.dist - b.dist);
+  const shortestKing= validDistList[0] || enhancedFleet[0];
+  const mileageKing = [...enhancedFleet].sort((a, b) => b.totalDist - a.totalDist)[0] || enhancedFleet[0];
+  const datedFleet  = enhancedFleet.filter(a => a.inductionDate).sort((a, b) => new Date(a.inductionDate) - new Date(b.inductionDate));
+  const oldestVeteran = datedFleet[0] || enhancedFleet[0];
+
+  let totalWollarsVault = 0;
+  const airportVaultList = [];
+  if (typeof wollarsHistory !== 'undefined' && wollarsHistory && !Array.isArray(wollarsHistory)) {
+    Object.keys(wollarsHistory).forEach(code => {
+      const arr = wollarsHistory[code];
+      if (arr && arr.length) {
+        const latest = arr[arr.length - 1].value || 0;
+        totalWollarsVault += latest;
+        airportVaultList.push({ code, val: latest });
+      }
+    });
+    airportVaultList.sort((a, b) => b.val - a.val);
+  }
+
+  const uniqueRoutes = new Set();
+  const coveredCountries = new Set();
+  fleet.forEach(a => {
+    if (a.base && a.dest) uniqueRoutes.add([a.base, a.dest].sort().join('-'));
+    const bCity = getCityInfo(a.base);
+    const dCity = getCityInfo(a.dest);
+    if (bCity && bCity.country) coveredCountries.add(bCity.country);
+    if (dCity && dCity.country) coveredCountries.add(dCity.country);
+  });
+
+  const goldVal = document.getElementById('gold-coin-value')?.textContent || '0';
+  const silverVal = document.getElementById('silver-coin-value')?.textContent || '0';
+  const commanderName = (document.getElementById('account-email-display')?.textContent || 'COMMANDER').split('@')[0];
+  const dateStr = new Date().toISOString().slice(0, 10);
+
+  const sRatio = (ratingCounts.S + ratingCounts.A) / totalAc;
+  const fleetTier = sRatio >= 0.5 ? 'S' : sRatio >= 0.3 ? 'A' : 'B';
+  const fleetTierLabel = fleetTier === 'S' ? 'LEGENDARY ARMADA' : fleetTier === 'A' ? 'ELITE SQUADRON' : 'EXPANDING FLEET';
+
+  // ──────────────────────────────────────────
+  // 2. 绘制深空背景与网格
+  // ──────────────────────────────────────────
+  const bgGrad = ctx.createRadialGradient(width * 0.5, height * 0.08, 80, width * 0.5, height * 0.5, width);
+  bgGrad.addColorStop(0, '#12182b');
+  bgGrad.addColorStop(0.5, '#0a0d18');
+  bgGrad.addColorStop(1, '#05070d');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+  for (let x = 20; x < width; x += 28) {
+    for (let y = 20; y < height; y += 28) {
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+  }
+
+  const aura1 = ctx.createRadialGradient(width * 0.85, 90, 20, width * 0.85, 90, 280);
+  aura1.addColorStop(0, 'rgba(139, 92, 246, 0.22)');
+  aura1.addColorStop(1, 'transparent');
+  ctx.fillStyle = aura1;
+  ctx.fillRect(0, 0, width, height);
+
+  const aura2 = ctx.createRadialGradient(80, height - 160, 20, 80, height - 160, 320);
+  aura2.addColorStop(0, 'rgba(56, 189, 248, 0.16)');
+  aura2.addColorStop(1, 'transparent');
+  ctx.fillStyle = aura2;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(18, 18, width - 36, height - 36);
+
+  function drawCornerMark(cx, cy, size = 12) {
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + (cy > 50 ? -size : size));
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx + (cx > 50 ? -size : size), cy);
+    ctx.stroke();
+  }
+  drawCornerMark(24, 24);
+  drawCornerMark(width - 24, 24);
+  drawCornerMark(24, height - 24);
+  drawCornerMark(width - 24, height - 24);
+
+  function drawGlassCard(x, y, w, h, borderLit = false, bgTint = 'rgba(255, 255, 255, 0.045)') {
+    ctx.save();
+    ctx.fillStyle = bgTint;
+    ctx.strokeStyle = borderLit ? 'rgba(139, 92, 246, 0.45)' : 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ──────────────────────────────────────────
+  // 3. 页眉 (HEADER) - 金币与银币图标绘制
+  // ──────────────────────────────────────────
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#a78bfa';
+  ctx.font = '700 11px "Inter Tight", monospace';
+  ctx.fillText('/// FLIGHT TELEMETRY SYSTEM · OPS SUMMARY REPORT', 40, 48);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 26px "DM Sans", "Noto Sans SC", sans-serif';
+  ctx.fillText('WOA FLEET 运营战报', 40, 80);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '600 12px "Inter Tight", monospace';
+  ctx.fillText(`BASE STATION · SYSTEM v4.7  |  GLOBAL ACTIVE OPS`, 40, 98);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '700 13px "Inter Tight", monospace';
+  ctx.fillText(`OPERATOR: ${commanderName.toUpperCase()}`, width - 40, 52);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '12px "Inter Tight", monospace';
+  ctx.fillText(`CYCLE: ${dateStr}  |  STATUS: ONLINE`, width - 40, 72);
+
+  // 金币徽章 (带真实图片)
+  ctx.fillStyle = 'rgba(245, 193, 92, 0.15)';
+  ctx.beginPath();
+  ctx.roundRect(width - 230, 82, 90, 22, 11);
+  ctx.fill();
+  drawSummaryIconImg(ctx, 'gold', width - 224, 85, 16);
+  ctx.fillStyle = '#fbbf24';
+  ctx.font = '700 12px "Inter Tight", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(goldVal, width - 202, 97);
+
+  // 银币徽章 (带真实图片)
+  ctx.fillStyle = 'rgba(203, 213, 225, 0.15)';
+  ctx.beginPath();
+  ctx.roundRect(width - 130, 82, 90, 22, 11);
+  ctx.fill();
+  drawSummaryIconImg(ctx, 'silver', width - 124, 85, 16);
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = '700 12px "Inter Tight", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(silverVal, width - 102, 97);
+
+  // ──────────────────────────────────────────
+  // 4. 战备总览带 (HERO STRIP)
+  // ──────────────────────────────────────────
+  const heroY = 116;
+  const heroH = 88;
+  drawGlassCard(40, heroY, width - 80, heroH, true, 'rgba(255, 255, 255, 0.055)');
+
+  ctx.save();
+  const badgeGrad = ctx.createLinearGradient(54, heroY + 12, 118, heroY + 76);
+  badgeGrad.addColorStop(0, fleetTier === 'S' ? '#f5c15c' : '#8b5cf6');
+  badgeGrad.addColorStop(1, fleetTier === 'S' ? '#b45309' : '#38bdf8');
+  ctx.fillStyle = badgeGrad;
+  ctx.beginPath();
+  ctx.roundRect(56, heroY + 12, 64, 64, 8);
+  ctx.fill();
+  ctx.shadowColor = 'rgba(245, 193, 92, 0.5)';
+  ctx.shadowBlur = 12;
+
+  ctx.fillStyle = '#080c18';
+  ctx.font = '900 36px "Inter Tight", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(fleetTier, 88, heroY + 56);
+  ctx.restore();
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#f5c15c';
+  ctx.font = '700 15px "Inter Tight", monospace';
+  ctx.fillText(fleetTierLabel, 134, heroY + 34);
+
+  const tiers = ['S', 'A', 'B', 'C', 'D'];
+  const tColors = { S: '#f5c15c', A: '#c084fc', B: '#38bdf8', C: '#34d399', D: '#94a3b8' };
+  let rx = 134;
+  tiers.forEach(t => {
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.strokeStyle = tColors[t] + '66';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(rx, heroY + 44, 54, 24, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = tColors[t];
+    ctx.font = '700 11px "Inter Tight", monospace';
+    ctx.fillText(`${t}级`, rx + 6, heroY + 60);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 12px "Inter Tight", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(ratingCounts[t] || 0, rx + 48, heroY + 60);
+    ctx.textAlign = 'left';
+
+    rx += 60;
+  });
+
+  // 右侧核心收益 (带 Wollars 图标)
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '600 11px "Inter Tight", monospace';
+  ctx.fillText('单趟全局净利润期望', width - 56, heroY + 32);
+
+  const profitText = `+${Math.round(totalTripProfit).toLocaleString()}`;
+  ctx.fillStyle = '#34d399';
+  ctx.font = '800 24px "Inter Tight", monospace';
+  ctx.fillText(profitText, width - 78, heroY + 58);
+  drawSummaryIconImg(ctx, 'wollars', width - 74, heroY + 40, 18);
+
+  const earnedText = `${formatLargeNum(totalCumulativeEarned)}`;
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '600 11px "Inter Tight", monospace';
+  ctx.fillText('累积总创收: ', width - 138, heroY + 76);
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '700 11px "Inter Tight", monospace';
+  ctx.fillText(earnedText, width - 74, heroY + 76);
+  drawSummaryIconImg(ctx, 'wollars', width - 70, heroY + 64, 13);
+
+  // ──────────────────────────────────────────
+  // 5. 关键度量 4 联卡
+  // ──────────────────────────────────────────
+  const qY = heroY + heroH + 12;
+  const qW = (width - 80 - 36) / 4;
+  const qH = 88;
+
+  const recoveryPct = ((recoveredCount / totalAc) * 100).toFixed(1);
+  const formattedPaxStr = `${Math.round(totalPaxTrans).toLocaleString()} 客`;
+
+  const qMetrics = [
+    {
+      title: '机队规模',
+      val: `${totalAc} 架`,
+      drawSub: (x, y) => {
+        ctx.fillStyle = '#38bdf8'; ctx.fillText(`客 ${paxAc}`, x, y);
+        ctx.fillStyle = '#94a3b8'; ctx.fillText(' · ', x + 34, y);
+        ctx.fillStyle = '#f5c15c'; ctx.fillText(`货 ${cargoAc}`, x + 44, y);
+      },
+      color: '#8b5cf6'
+    },
+    {
+      title: '资产回本率',
+      val: `${recoveryPct}%`,
+      drawSub: (x, y) => {
+        ctx.fillStyle = '#34d399'; ctx.fillText(`${recoveredCount}`, x, y);
+        ctx.fillStyle = '#cbd5e1'; ctx.fillText(` / ${totalAc} 架已回本`, x + String(recoveredCount).length * 8, y);
+      },
+      color: '#10b981'
+    },
+    {
+      title: '航网通达',
+      val: `${coveredCountries.size} 国`,
+      drawSub: (x, y) => {
+        ctx.fillStyle = '#38bdf8'; ctx.fillText(`${uniqueRoutes.size}`, x, y);
+        ctx.fillStyle = '#cbd5e1'; ctx.fillText(' 条独立航线', x + String(uniqueRoutes.size).length * 8, y);
+      },
+      color: '#38bdf8'
+    },
+    {
+      title: '全局总客运量',
+      val: formattedPaxStr,
+      drawSub: (x, y) => {
+        ctx.fillStyle = '#cbd5e1'; ctx.fillText('货运 ', x, y);
+        ctx.fillStyle = '#f5c15c'; ctx.fillText(`${Math.round(totalCargoTrans).toLocaleString()} 吨`, x + 30, y);
+      },
+      color: '#f5c15c',
+      isLongVal: formattedPaxStr.length > 9
+    }
+  ];
+
+  qMetrics.forEach((m, i) => {
+    const mx = 40 + i * (qW + 12);
+    drawGlassCard(mx, qY, qW, qH);
+
+    ctx.fillStyle = m.color;
+    ctx.fillRect(mx + 12, qY + 12, 3, 12);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '700 11px "Inter Tight", monospace';
+    ctx.fillText(m.title, mx + 20, qY + 22);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = m.isLongVal ? '800 17px "Inter Tight", monospace' : '800 22px "Inter Tight", monospace';
+    ctx.fillText(m.val, mx + 12, qY + 52);
+
+    ctx.font = '600 11px "Inter Tight", monospace';
+    m.drawSub(mx + 12, qY + 72);
+  });
+
+  // ──────────────────────────────────────────
+  // 6. 六大王牌功勋战机 (带 Wollars 图标)
+  // ──────────────────────────────────────────
+  const titY = qY + qH + 18;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#f5c15c';
+  ctx.font = '800 12px "Inter Tight", monospace';
+  ctx.fillText('/// FLEET HALL OF FAME · 六大王牌功勋战机', 40, titY);
+
+  const fameY = titY + 8;
+  const fameCardW = (width - 80 - 14) / 2;
+  const fameCardH = 82;
+
+  let oldestAgeStr = '未知';
+  if (oldestVeteran && oldestVeteran.inductionDate) {
+    oldestAgeStr = calculateAge(oldestVeteran.inductionDate);
+  }
+
+  const titans = [
+    { tag: '🏆 单趟净利之王', reg: profitKing.reg, icao: profitKing.icao, route: `${profitKing.base || '—'} ➔ ${profitKing.dest || '—'}`, val: `+${Math.round(profitKing.profit).toLocaleString()}`, hasIcon: true, sub: '单趟最高净利', col: '#34d399', bg: 'rgba(52, 211, 153, 0.05)' },
+    { tag: '⚡ 最高时薪之王', reg: hourlyKing.reg, icao: hourlyKing.icao, route: `${hourlyKing.base || '—'} ➔ ${hourlyKing.dest || '—'}`, val: `${Math.round(hourlyKing.profitHr).toLocaleString()}`, isHourly: true, sub: `${hourlyKing.flightHrs||0}h${hourlyKing.flightMins||0}m 快速周转`, col: '#38bdf8', bg: 'rgba(56, 189, 248, 0.05)' },
+    { tag: '🌍 极光远航之最', reg: rangeKing.reg, icao: rangeKing.icao, route: `${rangeKing.base || '—'} ➔ ${rangeKing.dest || '—'}`, val: `${rangeKing.dist.toLocaleString()} nm`, sub: '最远跨洋航线', col: '#c084fc', bg: 'rgba(192, 132, 252, 0.05)' },
+    { tag: '🛩️ 极限穿梭之最', reg: shortestKing.reg, icao: shortestKing.icao, route: `${shortestKing.base || '—'} ➔ ${shortestKing.dest || '—'}`, val: `${shortestKing.dist.toLocaleString()} nm`, sub: '极限短途摆渡', col: '#fb923c', bg: 'rgba(251, 146, 60, 0.05)' },
+    { tag: '🛡️ 功勋里程之王', reg: mileageKing.reg, icao: mileageKing.icao, route: `累计执飞 ${mileageKing.flightCount} 趟`, val: `${mileageKing.totalDist ? Number(mileageKing.totalDist).toLocaleString() : '—'} nm`, sub: '终身累计总航程', col: '#f5c15c', bg: 'rgba(245, 193, 92, 0.05)' },
+    { tag: '🎖️ 功勋服役元老', reg: oldestVeteran.reg, icao: oldestVeteran.icao, route: `引进于 ${oldestVeteran.inductionDate || '初期'}`, val: oldestAgeStr, sub: '资历最深老兵', col: '#f43f5e', bg: 'rgba(244, 63, 94, 0.05)' }
+  ];
+
+  titans.forEach((t, i) => {
+    const tx = 40 + (i % 2) * (fameCardW + 14);
+    const ty = fameY + Math.floor(i / 2) * (fameCardH + 8);
+    drawGlassCard(tx, ty, fameCardW, fameCardH, false, t.bg);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = t.col;
+    ctx.font = '700 11px "Inter Tight", monospace';
+    ctx.fillText(t.tag, tx + 14, ty + 19);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '800 16px "Inter Tight", monospace';
+    ctx.fillText(t.reg || 'UNKNOWN', tx + 14, ty + 42);
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = '700 11px "Inter Tight", monospace';
+    ctx.fillText(t.icao, tx + 14, ty + 59);
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '500 11px "Inter Tight", monospace';
+    ctx.fillText(t.route, tx + 14, ty + 74);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = t.col;
+    ctx.font = '800 18px "Inter Tight", monospace';
+
+    if (t.hasIcon) {
+      ctx.fillText(t.val, tx + fameCardW - 32, ty + 44);
+      drawSummaryIconImg(ctx, 'wollars', tx + fameCardW - 28, ty + 30, 15);
+    } else if (t.isHourly) {
+      ctx.fillText(t.val, tx + fameCardW - 48, ty + 44);
+      drawSummaryIconImg(ctx, 'wollars', tx + fameCardW - 44, ty + 30, 15);
+      ctx.fillText('/h', tx + fameCardW - 14, ty + 44);
+    } else {
+      ctx.fillText(t.val, tx + fameCardW - 14, ty + 44);
+    }
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '600 10px "Inter Tight", monospace';
+    ctx.fillText(t.sub, tx + fameCardW - 14, ty + 64);
+  });
+
+  // ──────────────────────────────────────────
+  // 7. 机型梯队与阵营分布
+  // ──────────────────────────────────────────
+  const compY = fameY + (fameCardH + 8) * 3 + 14;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '800 12px "Inter Tight", monospace';
+  ctx.fillText('/// FLEET STRUCTURE & LOGISTICS · 机型梯队与阵营分布', 40, compY);
+
+  const secY = compY + 8;
+  const colW = (width - 80 - 14) / 2;
+  const secH = 224;
+
+  // 主力机型 TOP 5
+  drawGlassCard(40, secY, colW, secH);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 11px "Inter Tight", monospace';
+  ctx.fillText('主力在役机型 TOP 5 (ACTIVE MODELS)', 56, secY + 22);
+
+  const topModels = countBy(fleet, 'icao').slice(0, 5);
+  const maxModelCount = topModels.length ? topModels[0][1] : 1;
+  let barY = secY + 42;
+
+  topModels.forEach(([icao, cnt]) => {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 13px "Inter Tight", monospace';
+    ctx.fillText(icao, 56, barY + 12);
+
+    const bW = colW - 165;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.beginPath();
+    ctx.roundRect(114, barY, bW, 14, 3);
+    ctx.fill();
+
+    const curW = (cnt / maxModelCount) * bW;
+    const barGrad = ctx.createLinearGradient(114, 0, 114 + curW, 0);
+    barGrad.addColorStop(0, '#8b5cf6');
+    barGrad.addColorStop(1, '#38bdf8');
+    ctx.fillStyle = barGrad;
+    ctx.beginPath();
+    ctx.roundRect(114, barY, curW, 14, 3);
+    ctx.fill();
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = '700 12px "Inter Tight", monospace';
+    ctx.fillText(`${cnt} 架`, 40 + colW - 16, barY + 12);
+
+    barY += 34;
+  });
+
+  // 核心枢纽 + 空客波音比例
+  drawGlassCard(40 + colW + 14, secY, colW, secH);
+  const rxCol = 40 + colW + 28;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 11px "Inter Tight", monospace';
+  ctx.fillText('核心驻扎基地枢纽 (MAJOR HUBS)', rxCol, secY + 22);
+
+  const baseCounts = countBy(fleet, 'base').slice(0, 4);
+  let hubY = secY + 42;
+
+  baseCounts.forEach(([baseCode, count], idx) => {
+    const city = getCityInfo(baseCode);
+    const cityName = city ? city.name : 'Unknown Hub';
+
+    ctx.fillStyle = idx === 0 ? '#f5c15c' : '#38bdf8';
+    ctx.font = '800 15px "Inter Tight", monospace';
+    ctx.fillText(baseCode, rxCol, hubY + 12);
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '500 11px "Inter Tight", monospace';
+    ctx.fillText(cityName.slice(0, 18), rxCol + 60, hubY + 12);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 12px "Inter Tight", monospace';
+    ctx.fillText(`${count} 架驻扎`, 40 + colW * 2 + 14 - 16, hubY + 12);
+    ctx.textAlign = 'left';
+
+    hubY += 30;
+  });
+
+  const mfrCounts = countBy(fleet, 'mfr');
+  const airbusCnt = (mfrCounts.find(m => m[0].includes('Airbus')) || [0, 0])[1];
+  const boeingCnt = (mfrCounts.find(m => m[0].includes('Boeing')) || [0, 0])[1];
+  const otherCnt = totalAc - airbusCnt - boeingCnt;
+
+  const mfrY = secY + 168;
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 11px "Inter Tight", monospace';
+  ctx.fillText('空客 / 波音 阵营分布比', rxCol, mfrY);
+
+  const fullBarW = colW - 32;
+  const aW = (airbusCnt / totalAc) * fullBarW;
+  const bW = (boeingCnt / totalAc) * fullBarW;
+  const oW = fullBarW - aW - bW;
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.beginPath();
+  ctx.roundRect(rxCol, mfrY + 8, Math.max(0, aW - 2), 11, 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#f5c15c';
+  ctx.beginPath();
+  ctx.roundRect(rxCol + aW, mfrY + 8, Math.max(0, bW - 2), 11, 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#64748b';
+  ctx.beginPath();
+  ctx.roundRect(rxCol + aW + bW, mfrY + 8, Math.max(0, oW), 11, 2);
+  ctx.fill();
+
+  ctx.font = '700 10px "Inter Tight", monospace';
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillText(`Airbus: ${((airbusCnt/totalAc)*100).toFixed(0)}%`, rxCol, mfrY + 34);
+  ctx.fillStyle = '#f5c15c';
+  ctx.fillText(`Boeing: ${((boeingCnt/totalAc)*100).toFixed(0)}%`, rxCol + 105, mfrY + 34);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText(`其他: ${((otherCnt/totalAc)*100).toFixed(0)}%`, rxCol + 200, mfrY + 34);
+
+  // ──────────────────────────────────────────
+  // 8. 运营遥测与金库储备 (高度适度缩紧，尺寸分离)
+  // ──────────────────────────────────────────
+  const botSecY = secY + secH + 18;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#10b981';
+  ctx.font = '800 12px "Inter Tight", monospace';
+  ctx.fillText('/// OPERATIONAL TELEMETRY & ASSET VAULT · 运营纵深与金库储备', 40, botSecY);
+
+  const extY = botSecY + 8;
+  const extH = 172; // 缩减高度，给下方的机队尺寸卡片腾出专属空间
+  const extColW = (width - 80 - 14) / 2;
+
+  // 左栏：飞行运转遥测
+  drawGlassCard(40, extY, extColW, extH);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 11px "Inter Tight", monospace';
+  ctx.fillText('机队运转工时与维保遥测 (FLIGHT TELEMETRY)', 56, extY + 22);
+
+  const daysEquiv = (totalFleetFlightHours / 24).toFixed(1);
+  const teleY = extY + 36;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(56, teleY, extColW - 32, 40, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '700 10px "Inter Tight", monospace';
+  ctx.fillText('全机队单趟总执飞工时', 68, teleY + 15);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 16px "Inter Tight", monospace';
+  ctx.fillText(`${Math.round(totalFleetFlightHours).toLocaleString()} 小时`, 68, teleY + 33);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '600 10.5px "Inter Tight", monospace';
+  ctx.fillText(`相当于轮候执飞 ${daysEquiv} 天`, 40 + extColW - 28, teleY + 33);
+  ctx.textAlign = 'left';
+
+  const teleY2 = teleY + 45;
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.strokeStyle = 'rgba(251, 113, 133, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(56, teleY2, extColW - 32, 40, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#fb7185';
+  ctx.font = '700 10px "Inter Tight", monospace';
+  ctx.fillText('全局单波次维保点数消耗', 68, teleY2 + 15);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 16px "Inter Tight", monospace';
+  ctx.fillText(`${totalMaintPoints.toFixed(1)} 点`, 68, teleY2 + 33);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '600 10.5px "Inter Tight", monospace';
+  ctx.fillText(`单机平均损耗 ${(totalMaintPoints/totalAc).toFixed(2)} 点`, 40 + extColW - 28, teleY2 + 33);
+  ctx.textAlign = 'left';
+
+  const avgDist = Math.round(enhancedFleet.reduce((acc, a) => acc + a.dist, 0) / (totalAc || 1));
+  const avgProfitPerAc = Math.round(totalTripProfit / (totalAc || 1));
+  const teleY3 = teleY2 + 45;
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.strokeStyle = 'rgba(52, 211, 153, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(56, teleY3, extColW - 32, 40, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#34d399';
+  ctx.font = '700 10px "Inter Tight", monospace';
+  ctx.fillText('航网平均执行效率', 68, teleY3 + 15);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 16px "Inter Tight", monospace';
+  ctx.fillText(`${avgDist.toLocaleString()} nm`, 68, teleY3 + 33);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '600 10.5px "Inter Tight", monospace';
+  ctx.fillText(`平均单机净利 +${avgProfitPerAc.toLocaleString()}`, 40 + extColW - 44, teleY3 + 33);
+  drawSummaryIconImg(ctx, 'wollars', 40 + extColW - 40, teleY3 + 21, 13);
+  ctx.textAlign = 'left';
+
+  // ──────────────────────────────────────────
+  // 右栏：Wollars 金库储备 (HUD 极客金库重构版)
+  // ──────────────────────────────────────────
+  drawGlassCard(40 + extColW + 14, extY, extColW, extH);
+  const rxExt = 40 + extColW + 28;
+  const innerW = extColW - 28; // 内容可用宽度
+
+  // 1. 顶部标题区（双语 HUD 极客风）
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#f5c15c';
+  ctx.font = '800 10px "Inter Tight", monospace';
+  ctx.fillText('◈ LIQUIDITY VAULT', rxExt, extY + 16);
+
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = '700 12px "Inter Tight", "DM Sans", sans-serif';
+  ctx.fillText('机场 WOLLARS 储备金库', rxExt, extY + 30);
+
+  // 2. 全网现钞总储备 (微晶高光卡片)
+  const boxY = extY + 36;
+  const boxH = 48;
+
+  // 卡片渐变背景与微光描边
+  const vaultGrad = ctx.createLinearGradient(rxExt, boxY, rxExt + innerW, boxY + boxH);
+  vaultGrad.addColorStop(0, 'rgba(245, 193, 92, 0.16)');
+  vaultGrad.addColorStop(1, 'rgba(20, 24, 38, 0.45)');
+  ctx.fillStyle = vaultGrad;
+  ctx.strokeStyle = 'rgba(245, 193, 92, 0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(rxExt, boxY, innerW, boxH, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  // 卡片内上排：标签 + 右侧精致胶囊徽章
+  ctx.fillStyle = '#fde68a';
+  ctx.font = '700 9.5px "Inter Tight", monospace';
+  ctx.fillText('全网现钞总储备 · TOTAL CASH', rxExt + 12, boxY + 16);
+
+  // 右侧胶囊：监管机场数量
+  const countTag = `${airportVaultList.length} 处受监管机场`;
+  ctx.font = '600 10px "Inter Tight", sans-serif';
+  const tagW = ctx.measureText(countTag).width + 16;
+  const tagX = rxExt + innerW - tagW - 10;
+  ctx.fillStyle = 'rgba(245, 193, 92, 0.18)';
+  ctx.strokeStyle = 'rgba(245, 193, 92, 0.32)';
+  ctx.beginPath();
+  ctx.roundRect(tagX, boxY + 6, tagW, 18, 9);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#fef08a';
+  ctx.fillText(countTag, tagX + 8, boxY + 18.5);
+
+  // 卡片内下排：巨额数字 + Wollars 币标
+  const vaultNumStr = totalWollarsVault.toLocaleString();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 21px "Inter Tight", monospace';
+  ctx.fillText(vaultNumStr, rxExt + 12, boxY + 40);
+
+  const valTextW = ctx.measureText(vaultNumStr).width;
+  drawSummaryIconImg(ctx, 'wollars', rxExt + 14 + valTextW, boxY + 25, 17);
+
+  // 3. TOP 3 榜单标题行
+  const listTitleY = boxY + boxH + 13;
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 10px "Inter Tight", monospace';
+  ctx.fillText('资金储备排行 TOP 3 (BY LIQUIDITY)', rxExt, listTitleY);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '600 9.5px "Inter Tight", monospace';
+  ctx.fillText('占比 / 余额', rxExt + innerW, listTitleY);
+  ctx.textAlign = 'left';
+
+  // 4. TOP 3 独立数据行条目渲染
+  let rowY = listTitleY + 6;
+  const rowH = 20;
+  const rowGap = 4;
+  const maxTopVal = airportVaultList.length > 0 ? (airportVaultList[0].val || 1) : 1;
+
+  if (airportVaultList.length > 0) {
+    airportVaultList.slice(0, 3).forEach((item, idx) => {
+      const curY = rowY + idx * (rowH + rowGap);
+      const portCity = getCityInfo(item.code);
+      const rawName = portCity ? (portCity.name || portCity.city || item.code) : item.code;
+      const pct = totalWollarsVault > 0 ? ((item.val / totalWollarsVault) * 100).toFixed(1) : '0.0';
+
+      // 4.1 行底板与动态占比指示条（自带微透进度条效果）
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.beginPath();
+      ctx.roundRect(rxExt, curY, innerW, rowH, 5);
+      ctx.fill();
+
+      // 根据其在 TOP1 中的占比绘制金色微光槽
+      const barRatio = Math.min(1, Math.max(0.05, item.val / maxTopVal));
+      ctx.fillStyle = idx === 0 ? 'rgba(245, 193, 92, 0.12)' : 'rgba(56, 189, 248, 0.06)';
+      ctx.beginPath();
+      ctx.roundRect(rxExt, curY, innerW * barRatio, rowH, 5);
+      ctx.fill();
+
+      // 4.2 排行金银铜微型勋章
+      const medalColors = [
+        { bg: '#f59e0b', text: '#090d16', border: '#fbbf24' }, // #1 金
+        { bg: '#94a3b8', text: '#090d16', border: '#cbd5e1' }, // #2 银
+        { bg: '#b45309', text: '#fef3c7', border: '#d97706' }  // #3 铜
+      ];
+      const medal = medalColors[idx] || medalColors[2];
+
+      ctx.fillStyle = medal.bg;
+      ctx.strokeStyle = medal.border;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(rxExt + 4, curY + 3.5, 17, 13, 3);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = medal.text;
+      ctx.font = '900 9px "Inter Tight", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${idx + 1}`, rxExt + 12.5, curY + 13.5);
+
+      // 4.3 机场三字码
+      ctx.textAlign = 'left';
+      ctx.fillStyle = idx === 0 ? '#fde047' : '#ffffff';
+      ctx.font = '800 12px "Inter Tight", monospace';
+      ctx.fillText(item.code, rxExt + 27, curY + 14.5);
+
+      // 4.4 机场全名（智能测距裁剪并追加省略号，杜绝死板字数切割）
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 10.5px "Inter Tight", sans-serif';
+      const maxNameWidth = 115; // 为右侧金额留出安全空间
+      let safeName = rawName;
+      if (ctx.measureText(safeName).width > maxNameWidth) {
+        while (safeName.length > 0 && ctx.measureText(safeName + '…').width > maxNameWidth) {
+          safeName = safeName.slice(0, -1);
+        }
+        safeName += '…';
+      }
+      ctx.fillText(safeName, rxExt + 64, curY + 14);
+
+      // 4.5 资金占比（如 29.3%）
+      ctx.textAlign = 'right';
+      ctx.fillStyle = idx === 0 ? '#fbbf24' : '#64748b';
+      ctx.font = '600 10px "Inter Tight", monospace';
+      ctx.fillText(`${pct}%`, rxExt + innerW - 100, curY + 14.5);
+
+      // 4.6 储备金额与代币图标
+      const rowValStr = item.val.toLocaleString();
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '700 11.5px "Inter Tight", monospace';
+      ctx.fillText(rowValStr, rxExt + innerW - 18, curY + 14.5);
+
+      drawSummaryIconImg(ctx, 'wollars', rxExt + innerW - 14, curY + 3.5, 13);
+      ctx.textAlign = 'left';
+    });
+  } else {
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px "Inter Tight", monospace';
+    ctx.fillText('暂无受监管机场 Wollars 储备记录', rxExt + 12, rowY + 22);
+  }
+
+  // ──────────────────────────────────────────
+  // 9. 【全新独立分区】机队尺寸构型阶梯 (移至下方)
+  // ──────────────────────────────────────────
+  const sizeSecY = extY + extH + 12;
+  const sizeSecH = 64;
+  drawGlassCard(40, sizeSecY, width - 80, sizeSecH, true, 'rgba(255, 255, 255, 0.04)');
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '800 11.5px "Inter Tight", monospace';
+  ctx.fillText('/// FLEET SIZE SPECTRUM · 机队尺寸分级构型分布', 56, sizeSecY + 22);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '600 10.5px "Inter Tight", monospace';
+  ctx.fillText('全机队尺寸阶梯统计', 56, sizeSecY + 44);
+
+  // 遍历所有可用尺寸（A 到 G），并列排布
+  const allSizes = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+  const badgeStartW = width - 40 - 20; // 从右侧开始排布
+  const pillW = 60;
+  const pillGap = 10;
+  
+  // 过滤有数量的尺寸，或者全部并列展示
+  const activeSizes = allSizes.filter(s => (sizeCounts[s] || 0) > 0);
+  let curBadgeRight = width - 56;
+
+  [...activeSizes].reverse().forEach(sz => {
+    const sCnt = sizeCounts[sz] || 0;
+    const bx = curBadgeRight - pillW;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx, sizeSecY + 16, pillW, 32, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = '800 13px "Inter Tight", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(sz, bx + 10, sizeSecY + 37);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 13px "Inter Tight", monospace';
+    ctx.fillText(sCnt, bx + pillW - 10, sizeSecY + 37);
+    ctx.textAlign = 'left';
+
+    curBadgeRight -= (pillW + pillGap);
+  });
+
+  // ──────────────────────────────────────────
+  // 10. 底部条形码与 HUD 鉴权水印 (FOOTER)
+  // ──────────────────────────────────────────
+  const footY = height - 36;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(40, footY - 14);
+  ctx.lineTo(width - 40, footY - 14);
+  ctx.stroke();
+
+  ctx.fillStyle = '#64748b';
+  let barX = 40;
+  const barcodePattern = [2, 1, 3, 1, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 4, 2, 1, 3, 1, 1, 2, 3, 1, 2, 1];
+  barcodePattern.forEach(w => {
+    ctx.fillRect(barX, footY - 4, w, 18);
+    barX += w + 2;
+  });
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '10px "Inter Tight", monospace';
+  ctx.fillText(`SECURITY HASH // ${Math.random().toString(36).substring(2, 10).toUpperCase()}-WOA-CC`, barX + 16, footY + 8);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px "Inter Tight", monospace';
+  ctx.fillText('WOA FLEET COMMAND CENTER · STRICTLY CONFIDENTIAL · OPS VERIFIED', width - 40, footY + 8);
+}
+
+// 下载图片功能
+function downloadSummaryImage() {
+  const canvas = document.getElementById('summaryCanvas');
+  if (!canvas) return;
+  try {
+    const dataUrl = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = `WoA_Fleet_Summary_${new Date().toISOString().slice(0, 10)}.png`;
+    link.href = dataUrl;
+    
+    // 必须挂载到 DOM 才能兼容所有浏览器触发下载
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast('总结图已成功导出下载！');
+  } catch (err) {
+    console.error('导出失败:', err);
+    // 捕获跨域污染错误并给出明确提示
+    if (err.name === 'SecurityError') {
+      toast('下载失败：请通过本地服务器(如 Live Server)运行以解除安全限制', true);
+    } else {
+      toast('下载失败：' + err.message, true);
+    }
+  }
+}
+
+// 复制到剪贴板功能
+async function copySummaryToClipboard() {
+  const canvas = document.getElementById('summaryCanvas');
+  if (!canvas) return;
+  try {
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        toast('生成剪贴板图片失败', true);
+        return;
+      }
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      toast('总结图已复制到剪贴板，可直接在微信/QQ等软件中粘贴！');
+    });
+  } catch (err) {
+    console.error('Clipboard copy failed:', err);
+    toast('浏览器限制：请直接点击「保存高清图片」', true);
+  }
+}
+
+// ═══════════════════════════════════════════════
 // UI & THEME LOGIC
 // ═══════════════════════════════════════════════
 // 三态循环：深色 → 浅色 → 暖色方格 → 深色
@@ -5143,12 +6259,14 @@ function buildRoiRowHtml(a, rankIndex) {
             </div>
         </div>
         <div class="roi-progress-col">
-            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
-                <span style="color:var(--text2); font-size:11px;">${tripStatusText}</span>
-                <span style="font-family:var(--mono); font-weight:700; color:${progColor}; font-size:13px;">${a.progress.toFixed(1)}%</span>
+            <!-- 控制栏：已移除横版/竖版切换，仅保留右侧操作 -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="font-size:12px; color:var(--text3); font-family:var(--mono); display:flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-circle-check" style="color:var(--green)"></i> 战报长图已自动生成 · 适合手机长屏浏览与全网分享
             </div>
-            <div class="bar-track" style="height:5px; background:var(--bg-input); margin-top:4px;">
-                <div class="bar-fill" style="width:${progWidth}%; background:${progColor}; box-shadow:0 0 8px ${progColor};"></div>
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-ghost" onclick="copySummaryToClipboard()"><i class="fa-solid fa-copy"></i> 复制到剪贴板</button>
+                <button class="btn btn-primary" onclick="downloadSummaryImage()"><i class="fa-solid fa-download"></i> 保存高清图片</button>
             </div>
         </div>
         <div class="roi-data-col">
