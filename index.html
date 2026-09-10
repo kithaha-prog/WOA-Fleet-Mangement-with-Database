@@ -2345,7 +2345,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         <div class="logic-formula">
           <div><span class="var">Base Estimate (基础估算)</span> <span class="op">=</span> Min_Reward <span class="op">+</span> (Max_Reward <span class="op">-</span> Min_Reward) <span class="op">×</span> 94%</div>
           <div style="margin-top:8px;"><span class="var">Gross Revenue (毛收益)</span> <span class="op">=</span> Base Estimate <span class="op">×</span> Flight_Type_Multiplier</div>
-          <div style="margin-top:8px;font-size:12px;color:var(--text3);">Flight_Type_Multiplier（按机型自动判定）: 客机 0.909 ｜ 货机 0.91 ｜ A346F（ICAO=A346F）1.098</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text3);">Flight_Type_Multiplier（按机型自动判定）: 客机 0.909 ｜ 货机 0.91 ｜ A346F（ICAO=A346F）1 </div>
           <div style="margin-top:8px;"><span class="var">Maintenance Cost (维修折旧)</span> <span class="op">=</span> (A_Check_Price <span class="op">/</span> 100 <span class="op">×</span> Maint_Points) <span class="op">+</span> (CD_Check_Price <span class="op">/</span> 400 <span class="op">×</span> Maint_Points)</div>
           <div style="margin-top:8px;"><span class="var">Net Profit (单趟净利润)</span> <span class="op">=</span> Gross Revenue <span class="op">-</span> Maintenance Cost</div>
         </div>
@@ -7018,7 +7018,7 @@ function onTypeSelect() {
 
 // 固定载荷/上座率，以及客机/货机收益系数 (与独立版 WOA 收益财务预算器保持一致)
 const FIXED_LOAD_PCT = 94;
-const FLIGHT_TYPE_MULTIPLIER = { pax: 0.909, cargo: 0.91, a346f: 1.098 };
+const FLIGHT_TYPE_MULTIPLIER = { pax: 0.909, cargo: 0.91, a346f: 1 };
 function getFlightTypeMultiplier(ac) {
   if (!ac) return FLIGHT_TYPE_MULTIPLIER.pax;
   if (ac.icao === 'A346F') return FLIGHT_TYPE_MULTIPLIER.a346f;
