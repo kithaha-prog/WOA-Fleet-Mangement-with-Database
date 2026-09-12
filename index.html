@@ -2004,12 +2004,22 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
             <!-- 2. 2D 专属地图样式切换 -->
             <div class="map-mode-switch" id="map2d-style-switch" role="tablist">
                 <button type="button" class="map-mode-btn" id="map2d-btn-standard" onclick="setMap2DStyle('standard')"><i class="fa-solid fa-layer-group"></i> 标准地图</button>
+                <button type="button" class="map-mode-btn" id="map2d-btn-night" onclick="setMap2DStyle('night')"><i class="fa-solid fa-city"></i> 夜景地球</button>
                 <button type="button" class="map-mode-btn" id="map2d-btn-satellite" onclick="setMap2DStyle('satellite')"><i class="fa-solid fa-satellite"></i> 卫星影像</button>
             </div>
 
             <!-- 3. 2D 专属航线显示/隐藏开关 -->
             <div class="map-mode-switch" id="map2d-routes-switch" role="tablist">
                 <button type="button" class="map-mode-btn active" id="map2d-btn-routes" onclick="toggle2DRoutes()"><i class="fa-solid fa-route"></i> 隐藏航线</button>
+            </div>
+
+            <!-- 3.5 按基地筛选航线，避免全部航线堆在一起看不清 -->
+            <div class="map-mode-switch" role="tablist" style="padding: 3px 4px; align-items: center;">
+                <i class="fa-solid fa-filter" style="color:var(--text3); font-size:11px; line-height:1; padding-left:8px; flex-shrink:0;"></i>
+                <select id="map-base-filter-select" onchange="onMapBaseFilterChange(this.value)" title="只显示某个基地进出的航线"
+                    style="cursor:pointer; border:none; outline:none; background:transparent; color:var(--text1); font-family:var(--mono); font-size:12px; font-weight:600; line-height:1.2; padding:6px 10px 6px 4px; border-radius:999px; max-width:170px;">
+                    <option value="all" style="background:#14172a; color:var(--text1);">全部基地</option>
+                </select>
             </div>
 
             <!-- 4. 3D 专属地球样式切换 -->
@@ -6582,6 +6592,7 @@ function syncRouteMapToolbarUI() {
     if (switch3dArc) switch3dArc.style.display = is2D ? 'none' : 'inline-flex';
 
     document.getElementById('map2d-btn-standard')?.classList.toggle('active', map2dStyle === 'standard');
+    document.getElementById('map2d-btn-night')?.classList.toggle('active', map2dStyle === 'night');
     document.getElementById('map2d-btn-satellite')?.classList.toggle('active', map2dStyle === 'satellite');
     document.getElementById('globe3d-btn-dark')?.classList.toggle('active', globe3dStyle === 'dark');
     document.getElementById('globe3d-btn-satellite')?.classList.toggle('active', globe3dStyle === 'satellite');
@@ -6617,7 +6628,7 @@ function setRouteMapMode(mode) {
 }
 
 function setMap2DStyle(style) {
-    if (style !== 'standard' && style !== 'satellite') return;
+    if (style !== 'standard' && style !== 'satellite' && style !== 'night') return;
     map2dStyle = style;
     localStorage.setItem('woa_map2d_style', style);
     syncRouteMapToolbarUI();
@@ -6709,6 +6720,76 @@ function applyGlobe3DArcAnimation() {
         .arcDashAnimateTime(isFlow ? 1500 : 0);
 }
 
+// ── 基地筛选：只看某个基地进出的航线，避免全量航线太乱 ──
+let mapBaseFilter = localStorage.getItem('woa_map_base_filter') || 'all';
+
+function getFilteredFleetForMap() {
+    if (mapBaseFilter === 'all') return fleet;
+    return fleet.filter(ac => ac.base === mapBaseFilter);
+}
+
+function refreshBaseFilterOptions() {
+    const sel = document.getElementById('map-base-filter-select');
+    if (!sel) return;
+    const baseCounts = {};
+    fleet.forEach(ac => { if (ac.base) baseCounts[ac.base] = (baseCounts[ac.base] || 0) + 1; });
+    const bases = Object.keys(baseCounts).sort((a, b) => baseCounts[b] - baseCounts[a]);
+    const prevValue = mapBaseFilter;
+    sel.innerHTML = `<option value="all">全部基地</option>` +
+        bases.map(code => `<option value="${code}">${code} · ${baseCounts[code]} 架</option>`).join('');
+    // 若之前选中的基地已不存在（比如飞机被删了），自动回退到"全部基地"
+    sel.value = bases.includes(prevValue) || prevValue === 'all' ? prevValue : 'all';
+    if (sel.value !== prevValue) { mapBaseFilter = sel.value; localStorage.setItem('woa_map_base_filter', mapBaseFilter); }
+}
+
+function onMapBaseFilterChange(value) {
+    mapBaseFilter = value;
+    localStorage.setItem('woa_map_base_filter', value);
+    refreshRouteMap();
+}
+
+// ── 生成弧形航线的采样点：沿用航线悬浮预览(generateFlightAwareTrack)的随机弧度逻辑，
+// 但用航线自身的编号做种子，保证每次重绘时同一条航线的弧度是固定的，不会跳来跳去 ──
+function seededRandomFn(seedStr) {
+    let h = 1779033703 ^ seedStr.length;
+    for (let i = 0; i < seedStr.length; i++) {
+        h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+        h = (h << 13) | (h >>> 19);
+    }
+    return function () {
+        h = Math.imul(h ^ (h >>> 16), 2246822507);
+        h = Math.imul(h ^ (h >>> 13), 3266489909);
+        h ^= h >>> 16;
+        return (h >>> 0) / 4294967296;
+    };
+}
+
+function getArcPoints(lat1, lon1, lat2, lon2, routeKey, segments = 48) {
+    const rand = seededRandomFn(routeKey || `${lat1},${lon1},${lat2},${lon2}`);
+    // 每条航线独立随机弧度方向与弧度深浅，不再全部往一个方向鼓
+    const curveDepth = (rand() * 0.3 + 0.12) * (rand() < 0.5 ? -1 : 1);
+    const midLat = (lat1 + lat2) / 2;
+    const midLon = (lon1 + lon2) / 2;
+    const dLat = lat2 - lat1;
+    const dLon = lon2 - lon1;
+    const ctrlLat = midLat - dLon * curveDepth;
+    const ctrlLon = midLon + dLat * curveDepth;
+
+    const points = [];
+    for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        let lat = (1 - t) * (1 - t) * lat1 + 2 * (1 - t) * t * ctrlLat + t * t * lat2;
+        let lon = (1 - t) * (1 - t) * lon1 + 2 * (1 - t) * t * ctrlLon + t * t * lon2;
+        // 轻微随机抖动，模拟真实航迹的细微不规则感（幅度比悬浮预览小，避免全网络视图太乱）
+        if (i > 0 && i < segments) {
+            lat += (rand() - 0.5) * Math.abs(dLat) * 0.02;
+            lon += (rand() - 0.5) * Math.abs(dLon) * 0.02;
+        }
+        points.push([lat, lon]);
+    }
+    return points;
+}
+
 // ── 5. 2D 底图切片设置 ──
 function update2DTileLayer() {
     if (!mapInstance) return;
@@ -6721,6 +6802,15 @@ function update2DTileLayer() {
             attribution: '&copy; Google Maps Imagery',
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+        }).addTo(mapInstance);
+    } else if (map2dStyle === 'night') {
+        // 夜景地球：NASA GIBS VIIRS Black Marble 真实全球夜间灯光影像（免密钥公开瓦片）
+        // 叠加一层极简暗色底图打底，避免瓦片边界处出现纯黑缝隙
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; CartoDB', subdomains: 'abcd', maxZoom: 19
+        }).addTo(mapInstance);
+        L.tileLayer('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg', {
+            attribution: '&copy; NASA EOSDIS GIBS / VIIRS Black Marble', maxZoom: 8, minZoom: 1, opacity: 0.95
         }).addTo(mapInstance);
     } else {
         const isLight = document.documentElement.classList.contains('light-theme') || 
@@ -6750,15 +6840,18 @@ function renderMap() {
         }
     });
 
+    refreshBaseFilterOptions();
+    const filteredFleet = getFilteredFleetForMap();
+
     const airportAgg = {};
-    fleet.forEach(ac => {
+    filteredFleet.forEach(ac => {
         if (ac.base) { if (!airportAgg[ac.base]) airportAgg[ac.base] = { asBase: 0, asDest: 0 }; airportAgg[ac.base].asBase++; }
         if (ac.dest) { if (!airportAgg[ac.dest]) airportAgg[ac.dest] = { asBase: 0, asDest: 0 }; airportAgg[ac.dest].asDest++; }
     });
 
     if (show2dRoutes) {
         const drawnRoutes = new Set();
-        fleet.forEach(ac => {
+        filteredFleet.forEach(ac => {
             const bInfo = getCityInfo(ac.base);
             const dInfo = getCityInfo(ac.dest);
             if (bInfo && bInfo.lat && dInfo && dInfo.lat) {
@@ -6770,9 +6863,20 @@ function renderMap() {
                     if (startLon > endLon) { endLon += 360; } else { startLon += 360; }
                 }
                 if (!drawnRoutes.has(routeKey) && !drawnRoutes.has(reverseKey)) {
-                    const lineColor = map2dStyle === 'satellite' ? '#c4b5fd' : '#8b5cf6';
-                    L.polyline([[bInfo.lat, startLon], [dInfo.lat, endLon]], {
-                        color: lineColor, weight: 2, opacity: 0.8, dashArray: '4, 6'
+                    const isVivid = (map2dStyle === 'satellite' || map2dStyle === 'night');
+                    const lineColor = isVivid ? '#7dd3fc' : '#8b5cf6';
+                    const coords = getArcPoints(bInfo.lat, startLon, dInfo.lat, endLon, routeKey);
+                    if (isVivid) {
+                        // 霓虹发光航线：底层加粗、低透明度的光晕线 + 上层细亮核心线，叠加出发光感
+                        L.polyline(coords, {
+                            color: lineColor, weight: 6, opacity: 0.18, dashArray: '1, 0', interactive: false
+                        }).addTo(mapInstance);
+                        L.polyline(coords, {
+                            color: lineColor, weight: 3, opacity: 0.35, dashArray: '1, 0', interactive: false
+                        }).addTo(mapInstance);
+                    }
+                    L.polyline(coords, {
+                        color: isVivid ? '#e0f2fe' : lineColor, weight: isVivid ? 1.4 : 2, opacity: isVivid ? 0.95 : 0.8, dashArray: '4, 6'
                     }).addTo(mapInstance);
                     drawnRoutes.add(routeKey);
                 }
@@ -6785,7 +6889,7 @@ function renderMap() {
         if (!info || !info.lat) return;
         const stat = airportAgg[code];
         const total = stat.asBase + stat.asDest;
-        const isSat = (map2dStyle === 'satellite');
+        const isSat = (map2dStyle === 'satellite' || map2dStyle === 'night');
         // 卫星影像底图色调偏绿/棕/蓝，原本的琥珀色 pin 容易被地表颜色"吃掉"，
         // 卫星模式下换成饱和度更高、与自然地貌反差更大的配色，并加白色描边进一步提升可视性
         let tierColor = isSat ? '#ff3b6b' : 'var(--amber)';
@@ -6875,15 +6979,18 @@ function renderGlobe() {
     const container = document.getElementById('fleet-globe-container');
     if (!container || typeof Globe === 'undefined') return;
 
+    refreshBaseFilterOptions();
+    const filteredFleet = getFilteredFleetForMap();
+
     const airportAgg = {};
-    fleet.forEach(ac => {
+    filteredFleet.forEach(ac => {
         if (ac.base) { if (!airportAgg[ac.base]) airportAgg[ac.base] = { asBase: 0, asDest: 0 }; airportAgg[ac.base].asBase++; }
         if (ac.dest) { if (!airportAgg[ac.dest]) airportAgg[ac.dest] = { asBase: 0, asDest: 0 }; airportAgg[ac.dest].asDest++; }
     });
 
     const drawnRoutes = new Set();
     const routeList = [];
-    fleet.forEach(ac => {
+    filteredFleet.forEach(ac => {
         const bInfo = getCityInfo(ac.base);
         const dInfo = getCityInfo(ac.dest);
         if (bInfo && bInfo.lat && dInfo && dInfo.lat) {
