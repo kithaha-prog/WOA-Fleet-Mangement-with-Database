@@ -1577,6 +1577,119 @@ html.strip-theme .toast-undo-btn { background: rgba(120,100,70,0.08); }
   .popup-body { padding: 14px 16px !important; }
 }
 
+/* ── 列设置弹窗：主题自适应背景 + Grid 三列紧凑对齐 ── */
+#col-settings-panel {
+    width: 270px !important;
+    min-width: 270px !important;
+    background: #1a1d26 !important; /* 深色主题背景：不透明深色 */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-radius: var(--r-md) !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+}
+
+/* 浅色主题：自动变成清爽纯白卡片，黑字清晰可见，绝不透出底层表格内容 */
+html.light-theme #col-settings-panel {
+    background: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.12) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* 暖色/方格纸主题适配 */
+html.strip-theme #col-settings-panel {
+    background: #f5efe3 !important;
+    border: 1px solid rgba(120, 100, 70, 0.2) !important;
+}
+
+#col-checkboxes {
+    overflow-x: hidden !important;
+    padding-right: 6px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+}
+
+/* 核心：改用精确的三列 Grid 网格，强行规整每一行的位置 */
+#col-checkboxes .col-drag-item,
+#col-checkboxes > div {
+    display: grid !important;
+    /* 第1列放把手(18px)，第2列放勾选框(20px)，第3列放文字(自适应撑满) */
+    grid-template-columns: 18px 20px 1fr !important;
+    align-items: center !important;
+    justify-content: start !important;
+    gap: 8px !important;
+    width: 100% !important;
+    padding: 6px 8px !important;
+    border-radius: 6px !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+}
+
+#col-checkboxes .col-drag-item:hover,
+#col-checkboxes > div:hover {
+    background: var(--bg-hover) !important;
+}
+
+/* 拖拽项基础样式 */
+#col-checkboxes .col-drag-item {
+    cursor: grab;
+    transition: background 0.15s ease, border 0.15s ease, opacity 0.15s ease;
+    user-select: none;
+}
+
+/* 正在被拖动的元素 */
+#col-checkboxes .col-drag-item.dragging {
+    opacity: 0.35;
+    background: var(--bg-hover) !important;
+}
+
+/* 插入指示线（吸附到目标项上方/下方） */
+#col-checkboxes .col-drag-item.drag-over-top {
+    border-top: 2px solid var(--cyan) !important;
+}
+#col-checkboxes .col-drag-item.drag-over-bottom {
+    border-bottom: 2px solid var(--cyan) !important;
+}
+
+/* 鼠标拖动时的手势 */
+#col-checkboxes .col-drag-item:active {
+    cursor: grabbing;
+}
+
+/* 第1列：把手图标 */
+#col-checkboxes i {
+    grid-column: 1 !important;
+    width: 14px !important;
+    color: var(--text3) !important;
+    cursor: grab !important;
+    margin: 0 !important;
+}
+
+/* 第2列：勾选框，紧挨着把手，绝不占中间大空间 */
+#col-checkboxes input[type="checkbox"] {
+    grid-column: 2 !important;
+    width: 15px !important;
+    height: 15px !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    justify-self: center !important;
+}
+
+/* 第3列：文字，紧随勾选框其后靠左排列，永不换行、永不被遮挡 */
+#col-checkboxes label,
+#col-checkboxes span {
+    grid-column: 3 !important;
+    white-space: nowrap !important;
+    font-size: 12.5px !important;
+    color: var(--text1) !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    margin: 0 !important;
+    padding-left: 2px !important;
+    text-align: left !important;
+    justify-self: start !important;
+}
+
 /* 航迹悬浮窗特效 */
 #hover-map-tooltip {
     position: absolute; display: none; width: 340px; height: 220px;
@@ -2293,11 +2406,15 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
                 </select>
 
                 <!-- 列设置 -->
+                <!-- 列设置 -->
                 <div style="position:relative; height:100%;">
-                   <button class="btn btn-ghost col-settings-btn" onclick="toggleColSettings()" title="自定义显示列" style="padding: 0 12px; height: 100%;"><i class="fa-solid fa-sliders"></i></button>
+                   <button class="btn btn-ghost col-settings-btn" onclick="toggleColSettings(event)" title="自定义显示列" style="padding: 0 12px; height: 100%;"><i class="fa-solid fa-sliders"></i></button>
                    <div id="col-settings-panel" class="dropdown-panel">
-                       <div style="font-size:11px; font-weight:600; color:var(--text3); margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:8px;"><i class="fa-solid fa-table-columns"></i> 配置表格显示列</div>
-                       <div id="col-checkboxes" style="display:flex; flex-direction:column; gap:8px; max-height:300px; overflow-y:auto; padding-right:4px;"></div>
+                       <div style="font-size:11px; font-weight:600; color:var(--text3); margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                           <span><i class="fa-solid fa-table-columns"></i> 配置表格显示列</span>
+                           <span style="cursor:pointer; color:var(--cyan); font-size:10.5px;" onclick="resetColumnsToDefault()" title="恢复默认列顺序与全部显示">恢复默认</span>
+                       </div>
+                       <div id="col-checkboxes" style="display:flex; flex-direction:column; gap:4px; max-height:300px; overflow-y:auto; padding-right:4px;"></div>
                    </div>
                 </div>
 
@@ -2491,6 +2608,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
             <div class="add-preview-row"><span class="label">维修折旧</span><span class="value" id="f-res-cost" style="color:var(--amber)">—</span></div>
             <div class="add-preview-row highlight"><span class="label">单趟净利润</span><span class="value" id="f-res-profit">—</span></div>
             <div class="add-preview-row"><span class="label">单位时间净利</span><span class="value" id="f-res-ph" style="color:var(--cyan)">—</span></div>
+            <div class="add-preview-row"><span class="label">每地勤收益</span><span class="value" id="f-res-crew" style="color:var(--amber)">—</span></div>
             <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border); font-size:11px; color:var(--text3); font-family:var(--mono)" id="f-res-formula">—</div>
           </div>
 
@@ -3063,6 +3181,16 @@ async function loadAirportWeather(code, lat, lon) {
     }
 }
 
+function resetColumnsToDefault() {
+    columnOrder = HEADERS.map(h => h.id);
+    visibleColumns = [...columnOrder];
+    localStorage.removeItem('woa_col_order');
+    localStorage.removeItem('woa_visible_cols');
+    renderColCheckboxes();
+    if (typeof renderFleet === 'function') renderFleet();
+    toast('已恢复默认列顺序');
+}
+
 // ═══════════════════════════════════════════════
 // AIRPORT INFO / HUB STATS
 // ═══════════════════════════════════════════════
@@ -3395,23 +3523,50 @@ const HEADERS = [
   { id: 'seq', label: '序号' }, { id: 'reg', label: '注册号' }, { id: 'icao', label: '机型' }, { id: 'base', label: '基地' },
   { id: 'size', label: '尺寸' }, { id: 'load', label: '类型' }, { id: 'dest', label: '目的地' },
   { id: 'timeStr', label: '往返时长' }, { id: 'seats', label: '客舱配置', noSort: true }, { id: 'profit', label: '单趟利润' },
-  { id: 'profitHr', label: '时薪 (W/h)' }, { id: 'roiProgress', label: '回本进度' }, { id: 'rating', label: '评级' }, { id: 'vsAvg', label: '同级表现', noSort: true }
+  { id: 'profitHr', label: '时薪 (W/h)' }, 
+  { id: 'profitCrew', label: '每地勤收益' },
+  { id: 'roiProgress', label: '回本进度' }, { id: 'rating', label: '评级' }, { id: 'vsAvg', label: '同级表现', noSort: true }
 ];
 const DEFAULT_COLS = HEADERS.map(h => h.id);
 let visibleColumns = [];
 try { visibleColumns = JSON.parse(localStorage.getItem('woa_visible_cols')); if (!Array.isArray(visibleColumns) || visibleColumns.length === 0) visibleColumns = DEFAULT_COLS; } 
 catch(e) { visibleColumns = DEFAULT_COLS; }
+// 确保新列自动出现在表格中，不会被浏览器旧缓存隐藏
+HEADERS.forEach(h => { if (!visibleColumns.includes(h.id)) visibleColumns.push(h.id); });
 
 // Column Order (任务 2.3 拖拽排序)
+// Column Order (带自动纠偏与补齐)
 let columnOrder = [];
 try {
     columnOrder = JSON.parse(localStorage.getItem('woa_col_order'));
     if (!Array.isArray(columnOrder) || columnOrder.length === 0) columnOrder = HEADERS.map(h => h.id);
-    // 容错：补上新增的列 / 剔除已不存在的列
     const validIds = HEADERS.map(h => h.id);
     columnOrder = columnOrder.filter(id => validIds.includes(id));
     validIds.forEach(id => { if (!columnOrder.includes(id)) columnOrder.push(id); });
 } catch(e) { columnOrder = HEADERS.map(h => h.id); }
+
+// 【核心纠偏】：检测每地勤收益(profitCrew)是否紧跟在时薪(profitHr)后面，若不是则自动调整并更新缓存
+function ensureProfitCrewAfterHourly() {
+    const hrIdx = columnOrder.indexOf('profitHr');
+    const crewIdx = columnOrder.indexOf('profitCrew');
+    if (hrIdx !== -1 && crewIdx !== -1 && crewIdx !== hrIdx + 1) {
+        columnOrder.splice(crewIdx, 1);
+        const newHrIdx = columnOrder.indexOf('profitHr');
+        columnOrder.splice(newHrIdx + 1, 0, 'profitCrew');
+        localStorage.setItem('woa_col_order', JSON.stringify(columnOrder));
+    }
+
+    // 可视列集合同步调整
+    const vHr = visibleColumns.indexOf('profitHr');
+    const vCrew = visibleColumns.indexOf('profitCrew');
+    if (vHr !== -1 && vCrew !== -1 && vCrew !== vHr + 1) {
+        visibleColumns.splice(vCrew, 1);
+        const newVHr = visibleColumns.indexOf('profitHr');
+        visibleColumns.splice(newVHr + 1, 0, 'profitCrew');
+        localStorage.setItem('woa_visible_cols', JSON.stringify(visibleColumns));
+    }
+}
+ensureProfitCrewAfterHourly();
 
 // ==========================================
 // WOA Command Center - 智能 OCR 多图录入引擎 (最终修复版)
@@ -5968,10 +6123,13 @@ window.addEventListener('DOMContentLoaded', () => {
     setupCountryRowClickHandlers();
 });
 
-// 点击设置面板外部区域时自动收起
+// 点击设置面板/列设置面板外部区域时自动收起
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('.settings-btn'); const panel = e.target.closest('#settings-panel');
     if (!btn && !panel) { const panelEl = document.getElementById('settings-panel'); if (panelEl) panelEl.classList.remove('show'); }
+
+    const colBtn = e.target.closest('.col-settings-btn'); const colPanel = e.target.closest('#col-settings-panel');
+    if (!colBtn && !colPanel) { const cp = document.getElementById('col-settings-panel'); if (cp) cp.classList.remove('show'); }
 });
 
 // 任务4：顶部栏全局搜索 —— 跳转到"管理机队"页并同步过滤条件
@@ -7436,17 +7594,183 @@ function setViewMode(mode, isInit = false) {
     if (!isInit) renderFleet();
 }
 
+// ── 1. 列切换的核心控制函数（改数据 + 存缓存 + 刷表格） ──
+function toggleColumn(id) {
+  if (!id) return;
+  const idx = visibleColumns.indexOf(id);
+  if (idx > -1) {
+    // 保护机制：至少保留 1 列，防止全部取消导致表格崩坏
+    if (visibleColumns.length <= 1) {
+      if (typeof toast === 'function') toast('至少需要保留一列显示', true);
+      const cb = document.getElementById(`col-check-${id}`);
+      if (cb) cb.checked = true;
+      return;
+    }
+    visibleColumns.splice(idx, 1);
+  } else {
+    visibleColumns.push(id);
+  }
+  // 1. 保存到本地存储
+  localStorage.setItem('woa_visible_cols', JSON.stringify(visibleColumns));
+  
+  // 2. 立即重新渲染机队表格（列即时显示/消失）
+  if (typeof renderFleet === 'function') {
+    renderFleet();
+  }
+}
+// 兼容不同函数名调用，防止报未定义
+window.toggleColumn = toggleColumn;
+window.toggleCol = toggleColumn;
+
+// ── 2. 点击整行任意位置均可切换（优化点击体验，防止拖拽干扰） ──
+function handleColRowClick(e, id) {
+  // 如果点击的是复选框本身，让它自己的 onchange 处理，避免重复反转
+  if (e.target.tagName.toLowerCase() === 'input') return;
+  // 如果点击的是拖拽图标，不触发勾选
+  if (e.target.tagName.toLowerCase() === 'i') return;
+  
+  const cb = document.getElementById(`col-check-${id}`);
+  if (cb) {
+    cb.checked = !cb.checked;
+    toggleColumn(id);
+  }
+}
+window.handleColRowClick = handleColRowClick;
+
+// ── 列设置弹窗控制、渲染与拖拽排序 ──
+function toggleColSettings(e) {
+    if (e) e.stopPropagation();
+    const panel = document.getElementById('col-settings-panel');
+    if (panel) panel.classList.toggle('show');
+}
+
 function initColSettings() {
-    const container = document.getElementById('col-checkboxes'); if(!container) return;
-    container.innerHTML = columnOrder.map(id => {
-        const h = HEADERS.find(x => x.id === id); if (!h) return '';
-        const isChecked = visibleColumns.includes(h.id) ? 'checked' : '';
-        return `<label draggable="true" data-col-id="${h.id}" class="col-drag-row" style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text1); cursor:pointer; padding:4px; border-radius:4px;">
-                  <i class="fa-solid fa-grip-vertical" style="color:var(--text3); cursor:grab;"></i>
-                  <input type="checkbox" id="cb-col-${h.id}" ${isChecked} onchange="toggleCol('${h.id}')"> ${h.label}
-                </label>`;
-    }).join('');
-    bindColDragEvents(container);
+    renderColCheckboxes();
+}
+
+function renderColCheckboxes() {
+    const container = document.getElementById('col-checkboxes');
+    if (!container) return;
+    container.innerHTML = '';
+
+    columnOrder.forEach((colId) => {
+        const header = HEADERS.find(h => h.id === colId);
+        if (!header) return;
+
+        const isChecked = visibleColumns.includes(colId);
+        const row = document.createElement('div');
+        row.className = 'col-drag-item';
+        row.setAttribute('draggable', 'true');
+        row.dataset.colId = colId;
+
+        row.innerHTML = `
+            <i class="fa-solid fa-grip-vertical" title="按住拖拽排序"></i>
+            <input type="checkbox" id="col-chk-${colId}" ${isChecked ? 'checked' : ''}>
+            <label for="col-chk-${colId}">${header.label}</label>
+        `;
+
+        // 勾选显示/隐藏事件
+        const chk = row.querySelector('input[type="checkbox"]');
+        chk.addEventListener('change', (e) => {
+            toggleColumnVisibility(colId, e.target.checked);
+        });
+
+        // 绑定拖拽排序事件
+        bindColumnDragEvents(row, container);
+
+        container.appendChild(row);
+    });
+}
+
+let draggedColItem = null;
+function bindColumnDragEvents(item, container) {
+    item.addEventListener('dragstart', (e) => {
+        draggedColItem = item;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.dataset.colId);
+        setTimeout(() => item.classList.add('dragging'), 0);
+    });
+
+    item.addEventListener('dragend', () => {
+        if (draggedColItem) {
+            draggedColItem.classList.remove('dragging');
+            draggedColItem = null;
+        }
+        container.querySelectorAll('.col-drag-item').forEach(el => {
+            el.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+    });
+
+    item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (!draggedColItem || draggedColItem === item) return;
+
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+            item.classList.add('drag-over-top');
+            item.classList.remove('drag-over-bottom');
+        } else {
+            item.classList.add('drag-over-bottom');
+            item.classList.remove('drag-over-top');
+        }
+    });
+
+    item.addEventListener('dragleave', () => {
+        item.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+
+    item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        item.classList.remove('drag-over-top', 'drag-over-bottom');
+        if (!draggedColItem || draggedColItem === item) return;
+
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+            container.insertBefore(draggedColItem, item);
+        } else {
+            container.insertBefore(draggedColItem, item.nextSibling);
+        }
+
+        // 保存拖拽后的新排序
+        saveColumnOrderFromDOM();
+    });
+}
+
+function saveColumnOrderFromDOM() {
+    const container = document.getElementById('col-checkboxes');
+    if (!container) return;
+    const newOrder = Array.from(container.querySelectorAll('.col-drag-item')).map(el => el.dataset.colId);
+    columnOrder = newOrder;
+    localStorage.setItem('woa_col_order', JSON.stringify(columnOrder));
+    if (typeof renderFleet === 'function') renderFleet();
+}
+
+function toggleColumnVisibility(colId, isVisible) {
+    if (isVisible) {
+        if (!visibleColumns.includes(colId)) visibleColumns.push(colId);
+    } else {
+        visibleColumns = visibleColumns.filter(id => id !== colId);
+    }
+    localStorage.setItem('woa_visible_cols', JSON.stringify(visibleColumns));
+    if (typeof renderFleet === 'function') renderFleet();
+}
+
+function resetColumnsToDefault() {
+    columnOrder = HEADERS.map(h => h.id);
+    visibleColumns = [...columnOrder];
+    localStorage.removeItem('woa_col_order');
+    localStorage.removeItem('woa_visible_cols');
+    renderColCheckboxes();
+    if (typeof renderFleet === 'function') renderFleet();
+    if (typeof toast === 'function') toast('已恢复默认列顺序');
+}
+
+function toggleColSettings() {
+    const panel = document.getElementById('col-settings-panel');
+    if (panel) panel.classList.toggle('show');
 }
 
 let colDragSrcId = null;
@@ -7476,12 +7800,6 @@ function bindColDragEvents(container) {
         });
     });
 }
-
-function toggleColSettings() { document.getElementById('col-settings-panel').classList.toggle('show'); }
-document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.col-settings-btn'); const panel = e.target.closest('#col-settings-panel');
-    if (!btn && !panel) { const panelEl = document.getElementById('col-settings-panel'); if(panelEl) panelEl.classList.remove('show'); }
-});
 
 function toggleCol(colId) {
     const cb = document.getElementById(`cb-col-${colId}`);
@@ -7559,6 +7877,13 @@ const COL_RENDERERS = {
     seats: (a) => `<span style="font-size:12px;color:var(--text2)">${seatLabel(a)}</span>`,
     profit: (a) => `<span style="font-size:12px;font-weight:600;font-family:var(--mono);color:${a.acProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${a.acProfit !== 0 ? fmt(Math.round(a.acProfit)) + ' ' + W_ICON : '—'}</span>`,
     profitHr: (a) => `<span style="font-size:12px;font-weight:600;font-family:var(--mono);color:var(--cyan)">${a.profitHr !== 0 ? fmt(Math.round(a.profitHr)) + ' ' + W_ICON : '—'}</span>`,
+    profitCrew: (a) => {
+        const dbInfo = (typeof DB !== 'undefined') ? DB.find(d => d.icao === a.icao) : null;
+        const crew = (dbInfo && dbInfo.crew > 0) ? dbInfo.crew : 1;
+        const pCrew = Math.round(a.acProfit / crew);
+        const color = pCrew >= 0 ? 'var(--green)' : 'var(--red)';
+        return `<span style="font-size:12px;font-weight:600;font-family:var(--mono);color:${color}">${a.acProfit !== 0 ? fmt(pCrew) + ' ' + W_ICON : '—'}</span><span style="font-size:10px;color:var(--text3);margin-left:2px;">(${crew}人)</span>`;
+    },
     roiProgress: (a) => {
         const pct = Math.max(0, Math.min(100, a.roiProgress || 0));
         const color = pct >= 100 ? 'var(--green)' : 'var(--amber)';
@@ -7681,6 +8006,10 @@ function renderFleet() {
     else if (sortCol === 'seq') { valA = seqMap[a.id]; valB = seqMap[b.id]; } 
     else if (sortCol === 'timeStr') { valA = a.totalHrs; valB = b.totalHrs; } 
     else if (sortCol === 'profitHr') { valA = a.profitHr; valB = b.profitHr; }
+    else if (sortCol === 'profitCrew') {
+        const getC = (x) => { const d = typeof DB !== 'undefined' ? DB.find(i => i.icao === x.icao) : null; return (d && d.crew > 0) ? d.crew : 1; };
+        valA = a.acProfit / getC(a); valB = b.acProfit / getC(b);
+    }
     else if (sortCol === 'rating') { valA = a.ratingData.score; valB = b.ratingData.score; }
     
     if (valA === undefined || valA === null) valA = ''; if (valB === undefined || valB === null) valB = '';
@@ -7897,7 +8226,11 @@ function openPopup(id) {
   const bFlag = getFlagImg(baseInfo);
   const dFlag = getFlagImg(destInfo);
 
-  // 1. 将单趟净利和时薪注入到头部右上角
+  // 1. 将单趟净利、时薪与每地勤收益注入到头部右上角
+  const crewNum = (dbInfo && dbInfo.crew > 0) ? dbInfo.crew : 1;
+  const pCrewVal = Math.round(acProfit / crewNum);
+  const pCrewText = acProfit !== 0 ? Math.round(pCrewVal).toLocaleString() + ' ' + W_ICON + `<span style="font-size:11px;color:var(--text3);font-weight:normal;"> (${crewNum}人)</span>` : '—';
+
   document.getElementById('popup-header-stats').innerHTML = `
       <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center;">
           <label style="font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">单趟净利</label>
@@ -7906,6 +8239,10 @@ function openPopup(id) {
       <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center;">
           <label style="font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">时薪 (Profit/Hr)</label>
           <div class="val" style="color:var(--cyan); font-size:18px; font-family:var(--mono); font-weight:600; line-height:1;">${profitHr > 0 ? Math.round(profitHr).toLocaleString() + ' ' + W_ICON + '/h' : '—'}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center;">
+          <label style="font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">每地勤收益</label>
+          <div class="val" style="color:var(--amber); font-size:18px; font-family:var(--mono); font-weight:600; line-height:1;">${pCrewText}</div>
       </div>
   `;
 
@@ -8192,6 +8529,13 @@ function calcAddRoute() {
   profEl.innerHTML = Math.round(profit).toLocaleString() + ' ' + W_ICON;
   profEl.style.color = profit >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('f-res-ph').innerHTML = totalHrs > 0 ? Math.round(profitPerHour).toLocaleString() + ' ' + W_ICON + '/h' : '—';
+  const crewCnt = (ac && ac.crew > 0) ? ac.crew : 1;
+  const pPerCrew = Math.round(profit / crewCnt);
+  const crewEl = document.getElementById('f-res-crew');
+  if (crewEl) {
+    crewEl.innerHTML = (profit !== 0 ? Math.round(pPerCrew).toLocaleString() + ' ' + W_ICON + ` <span style="font-size:10px;color:var(--text3);font-weight:normal">(${crewCnt}人)</span>` : '—');
+    crewEl.style.color = pPerCrew >= 0 ? 'var(--green)' : 'var(--red)';
+  }
   document.getElementById('f-res-formula').innerHTML = `收益 = [${minR.toLocaleString()} + (${maxR.toLocaleString()} − ${minR.toLocaleString()}) × ${FIXED_LOAD_PCT}%] × ${multiplier} = ${Math.round(rev).toLocaleString()} ${W_ICON}  |  磨损 = (${small.toLocaleString()}/100 × ${maint}) + (${large.toLocaleString()}/400 × ${maint}) = ${Math.round(cost).toLocaleString()} ${W_ICON}`;
 }
 
