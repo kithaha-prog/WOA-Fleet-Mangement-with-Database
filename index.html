@@ -2717,7 +2717,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 
 <!-- 找到 id="quick-dist-modal"，将原本的 max-width: 640px 建议调整为 760px，并更新表格 -->
 <div class="popup-overlay" id="quick-dist-modal" onclick="if(event.target===this) closeQuickDistModal()">
-  <div class="popup-box" style="max-width: 760px;">
+  <div class="popup-box" style="max-width: 960px;">
     <button class="popup-close-float" onclick="closeQuickDistModal()"><i class="fa-solid fa-xmark"></i></button>
     <div class="popup-header" style="padding: 24px 28px 16px 28px;">
       <div class="popup-title" style="display:flex; align-items:center; gap:10px;"><i class="fa-solid fa-bolt" style="color:var(--cyan)"></i> 极速更新累计总距离</div>
@@ -4428,6 +4428,16 @@ document.addEventListener('DOMContentLoaded', () => {
         regInput.focus();
     };
 
+    // 一键取消所有异常项的勾选
+    window.qdUncheckAllErrors = function() {
+        qdReviewRows.forEach(row => {
+            const val = qdValidateRow(row);
+            if (!val.isValid) row.checked = false;
+        });
+        qdRenderReviewTable();
+        toast('已自动取消所有异常飞机的勾选');
+    };
+
     // 渲染 OCR 批量审核表格并执行全局防呆校验
     function qdRenderReviewTable() {
         const tbody = document.getElementById('qd-review-tbody');
@@ -4456,10 +4466,7 @@ document.addEventListener('DOMContentLoaded', () => {
         datalistEl.innerHTML = unmatchedFleet.map(a => `<option value="${a.reg}">${a.icao} · ${a.base || '—'}</option>`).join('');
 
         let totalChecked = 0;
-        let errorCount = 0;
-        let decreasedCount = 0;
-        let notMultipleCount = 0;
-        let unmatchedCount = 0;
+        const checkedErrors = []; // 仅收集【被勾选且报错】的项
 
         // 3. 逐行校验并生成 HTML
         tbody.innerHTML = qdReviewRows.map(row => {
@@ -4469,10 +4476,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (row.checked) {
                 totalChecked++;
                 if (!val.isValid) {
-                    errorCount++;
-                    if (val.errorType === 'decreased') decreasedCount++;
-                    else if (val.errorType === 'not_multiple') notMultipleCount++;
-                    else unmatchedCount++;
+                    checkedErrors.push({ reg: row.reg || '未识别', errorMsg: val.errorMsg });
                 }
             }
 
@@ -4485,22 +4489,13 @@ document.addEventListener('DOMContentLoaded', () => {
             let rowBg = '';
             let distInputStyle = '';
 
-            if (val.errorType === 'decreased') {
-                rowBg = 'background: rgba(251, 113, 133, 0.12);';
-                distInputStyle = 'border-color: var(--red); color: var(--red); font-weight: 700;';
-                statusHtml = `<span style="color:var(--red); font-weight:600; font-size:11px;"><i class="fa-solid fa-circle-xmark"></i> ${val.errorMsg}</span>`;
-            } else if (val.errorType === 'not_multiple') {
-                rowBg = 'background: rgba(251, 113, 133, 0.10);';
-                distInputStyle = 'border-color: var(--red); color: var(--red); font-weight: 700;';
-                statusHtml = `<span style="color:var(--red); font-weight:600; font-size:11px;"><i class="fa-solid fa-circle-xmark"></i> ${val.errorMsg}</span>`;
-            } else if (val.errorType === 'unmatched') {
-                rowBg = 'background: rgba(245, 193, 92, 0.08);';
-                statusHtml = `<span style="color:var(--amber); font-weight:600; font-size:11px;"><i class="fa-solid fa-triangle-exclamation"></i> 需校对注册号</span>`;
-            } else if (val.errorType === 'invalid_dist' || val.errorType === 'no_dest_dist') {
-                rowBg = 'background: rgba(245, 193, 92, 0.08);';
-                distInputStyle = 'border-color: var(--amber);';
-                statusHtml = `<span style="color:var(--amber); font-weight:600; font-size:11px;"><i class="fa-solid fa-triangle-exclamation"></i> ${val.errorMsg}</span>`;
+            // 样式处理：如果未勾选，整体半透明淡化；勾选且报错才高亮警示
+            if (!val.isValid) {
+                rowBg = row.checked ? 'background: rgba(251, 113, 133, 0.12);' : 'background: rgba(255, 255, 255, 0.02); opacity: 0.55;';
+                distInputStyle = row.checked ? 'border-color: var(--red); color: var(--red); font-weight: 700;' : 'border-color: var(--border);';
+                statusHtml = `<span style="color:${row.checked ? 'var(--red)' : 'var(--text3)'}; font-weight:600; font-size:11px;"><i class="fa-solid fa-circle-xmark"></i> ${val.errorMsg}${!row.checked ? ' (已排除)' : ''}</span>`;
             } else {
+                rowBg = row.checked ? '' : 'opacity: 0.55;';
                 statusHtml = val.diffHtml;
             }
 
@@ -4512,7 +4507,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td style="padding:8px;">
                     <input type="text" list="qd-dynamic-unmatched-list" value="${row.reg || ''}" 
                           placeholder="双击选飞机"
-                          style="width:110px; font-family:var(--mono); text-transform:uppercase; padding:4px 6px; ${!isMatched ? 'border-color:var(--amber); color:var(--amber); font-weight:600;' : ''}" 
+                          style="width:110px; font-family:var(--mono); text-transform:uppercase; padding:4px 6px; ${!isMatched && row.checked ? 'border-color:var(--amber); color:var(--amber); font-weight:600;' : ''}" 
                           onchange="qdRowRegChanged('${row.id}', this.value)">
                 </td>
                 <td style="padding:8px;">${matchHtml}</td>
@@ -4531,30 +4526,33 @@ document.addEventListener('DOMContentLoaded', () => {
             checkAllEl.checked = qdReviewRows.length > 0 && qdReviewRows.every(r => r.checked);
         }
 
-        // 4. 底部状态与按钮禁用逻辑
+        // 4. 底部控制栏：明确列出具体报错飞机，并附带一键排除按钮
         if (applyBtn) {
             if (totalChecked === 0) {
                 applyBtn.disabled = true;
                 applyBtn.style.opacity = '0.4';
                 applyBtn.style.cursor = 'not-allowed';
                 if (summaryEl) summaryEl.innerHTML = `<span style="color:var(--text3);"><i class="fa-solid fa-circle-info"></i> 请勾选需要更新的飞机条目</span>`;
-            } else if (errorCount > 0) {
+            } else if (checkedErrors.length > 0) {
                 applyBtn.disabled = true;
                 applyBtn.style.opacity = '0.4';
                 applyBtn.style.cursor = 'not-allowed';
-                const msgs = [];
-                if (unmatchedCount > 0) msgs.push(`${unmatchedCount} 项未识别成功`);
-                if (decreasedCount > 0) msgs.push(`${decreasedCount} 项距离减少`);
-                if (notMultipleCount > 0) msgs.push(`${notMultipleCount} 项非往返倍数`);
+                const errorRegs = checkedErrors.map(e => `<b>${e.reg}</b> (${e.errorMsg})`).join('、');
                 if (summaryEl) {
-                    summaryEl.innerHTML = `<span style="color:var(--red);"><i class="fa-solid fa-ban"></i> <b>禁止确认</b>：检测到 ${msgs.join('，')}，请对照截图手动校对修正！</span>`;
+                    summaryEl.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="color:var(--red);"><i class="fa-solid fa-ban"></i> 勾选项中仍有 ${checkedErrors.length} 项异常：${errorRegs}</span>
+                            <button type="button" class="btn" onclick="qdUncheckAllErrors()" style="padding:2px 8px; font-size:11px; background:rgba(251,113,133,0.15); color:var(--red); border:1px solid var(--red); border-radius:4px; cursor:pointer;">
+                                <i class="fa-solid fa-filter-circle-xmark"></i> 一键取消异常项勾选
+                            </button>
+                        </div>`;
                 }
             } else {
                 applyBtn.disabled = false;
                 applyBtn.style.opacity = '1';
                 applyBtn.style.cursor = 'pointer';
                 if (summaryEl) {
-                    summaryEl.innerHTML = `<span style="color:var(--green);"><i class="fa-solid fa-circle-check"></i> 全部 ${totalChecked} 项校验通过（均满足往返里程整倍数），可安全应用</span>`;
+                    summaryEl.innerHTML = `<span style="color:var(--green);"><i class="fa-solid fa-circle-check"></i> 已勾选的 <b>${totalChecked}</b> 项校验完全通过，可安全应用！</span>`;
                 }
             }
         }
@@ -4640,12 +4638,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ocrDist = pxExtractDistance(distResult.data.text || '');
                 const regThumb = regCanvas.toDataURL('image/jpeg', 0.85);
 
+                // 原代码：checked: true
+                // 改为：提前执行一次校验，若存在异常则初始不勾选，合格项才默认勾选
+                const tempRow = { reg: ocrReg, newDist: ocrDist !== null ? ocrDist : '' };
+                const initialCheck = qdValidateRow(tempRow).isValid;
+
                 qdReviewRows.push({
                     id: 'qdrow' + i + '_' + Date.now(),
                     reg: ocrReg,
                     newDist: ocrDist !== null ? ocrDist : '',
                     thumb: regThumb,
-                    checked: true
+                    checked: initialCheck // 校验通过默认勾选，报错默认取消
                 });
             }
 
