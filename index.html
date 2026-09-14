@@ -2715,8 +2715,9 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
   </div>
 </div>
 
+<!-- 找到 id="quick-dist-modal"，将原本的 max-width: 640px 建议调整为 760px，并更新表格 -->
 <div class="popup-overlay" id="quick-dist-modal" onclick="if(event.target===this) closeQuickDistModal()">
-  <div class="popup-box" style="max-width: 640px;">
+  <div class="popup-box" style="max-width: 760px;">
     <button class="popup-close-float" onclick="closeQuickDistModal()"><i class="fa-solid fa-xmark"></i></button>
     <div class="popup-header" style="padding: 24px 28px 16px 28px;">
       <div class="popup-title" style="display:flex; align-items:center; gap:10px;"><i class="fa-solid fa-bolt" style="color:var(--cyan)"></i> 极速更新累计总距离</div>
@@ -2729,6 +2730,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         <button type="button" id="qd-tab-ocr-btn" class="btn btn-view-toggle" onclick="switchQdTab('ocr')" style="flex:1;">📷 截图批量识别</button>
       </div>
 
+      <!-- 手动输入面板 -->
       <div id="qd-panel-manual">
         <div class="form-group">
           <label>注册号 (Registration)</label>
@@ -2740,7 +2742,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         <div id="qd-match-info" style="font-size:12px; color:var(--text2); margin: -6px 0 14px 2px; min-height:16px;"></div>
         <div class="form-group">
           <label>新的累计总距离 (Total nm)</label>
-          <input type="number" id="qd-dist" min="0" placeholder="e.g. 37248"
+          <input type="number" id="qd-dist" min="0" placeholder="e.g. 37248" oninput="onQdDistInput()"
                  onkeydown="if(event.key==='Enter'){event.preventDefault(); applyQuickDistManual();}">
         </div>
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
@@ -2749,8 +2751,9 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         </div>
       </div>
 
+      <!-- OCR 批量识别面板 -->
       <div id="qd-panel-ocr" style="display:none;">
-        <div style="font-size:12px; color:var(--text2); margin-bottom:12px;">一次性拖入多张飞机详情截图，自动识别注册号与累计总距离并匹配到机队中对应的飞机（目前按 1600×900 分辨率的坐标裁剪识别）</div>
+        <div style="font-size:12px; color:var(--text2); margin-bottom:12px;">一次性拖入多张飞机详情截图，自动识别注册号与累计总距离并匹配到机队中对应的飞机（按 1600×900 点位裁剪识别）</div>
         <div id="qd-ocr-dropzone" style="border:2px dashed var(--border); padding:24px 16px; text-align:center; border-radius:12px; cursor:pointer; background:var(--bg-input);">
           <i class="fa-solid fa-cloud-arrow-up" style="font-size:22px; color:var(--cyan); margin-bottom:8px; display:block;"></i>
           <span style="font-size:13px; color:var(--text2);">点击或拖拽多张截图到此处（无须排序）</span>
@@ -2758,7 +2761,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         </div>
         <div id="qd-ocr-status" style="margin-top:12px; font-size:13px; font-weight:500; font-family:var(--mono);"></div>
         <div id="qd-review-wrap" style="display:none; margin-top:16px;">
-          <div style="max-height:320px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;">
+          <div style="max-height:340px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;">
             <table style="width:100%; font-size:12px; border-collapse:collapse;">
               <thead style="position:sticky; top:0; background:var(--bg-hover); z-index:1;">
               <tr>
@@ -2767,14 +2770,19 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
                 <th style="padding:8px; text-align:left;">识别注册号（可修正）</th>
                 <th style="padding:8px; text-align:left;">匹配到的飞机</th>
                 <th style="padding:8px; text-align:left;">旧距离 → 新距离（可修正）</th>
+                <th style="padding:8px; text-align:left;">校对状态</th>
               </tr>
             </thead>
               <tbody id="qd-review-tbody"></tbody>
             </table>
           </div>
-          <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
-            <button class="btn btn-ghost" onclick="closeQuickDistModal()">取消</button>
-            <button class="btn btn-primary" onclick="applyQuickDistBatch()"><i class="fa-solid fa-check-double"></i> 应用勾选项</button>
+          <!-- 底部控制栏：状态提示与防呆按钮 -->
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top:16px;">
+            <div id="qd-validation-summary" style="font-size:12px; font-weight:600; line-height:1.4;"></div>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <button class="btn btn-ghost" onclick="closeQuickDistModal()">取消</button>
+              <button class="btn btn-primary" id="qd-batch-apply-btn" onclick="applyQuickDistBatch()"><i class="fa-solid fa-check-double"></i> 应用勾选项</button>
+            </div>
           </div>
         </div>
       </div>
@@ -4173,6 +4181,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // cropRegionFromImage / loadImageFromFile / pxExtractRegCode / pxExtractDistance /
     // editDistance / PRECISE_OCR_REGIONS；同时挂到 window 上，供 HTML 内联 onclick 调用。
     // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════════
+    // ⚡ 极速更新累计总距离 (Quick Distance Update) 防呆与排序改造
+    // ═══════════════════════════════════════════════
+    // ═══════════════════════════════════════════════
+    // ⚡ 极速更新累计总距离 (Quick Distance Update) 防呆与航程倍数校验
+    // ═══════════════════════════════════════════════
     let qdReviewRows = [];
 
     function qdFindMatch(regGuess) {
@@ -4189,11 +4203,68 @@ document.addEventListener('DOMContentLoaded', () => {
         return (best && bestD <= 2 && rg.length >= 3) ? best : null;
     }
 
+    // 单行校验防呆规则（含单程航程 2 倍整数倍校验）
+    function qdValidateRow(row) {
+        const match = qdFindMatch(row.reg);
+        const isMatched = !!match;
+        const oldDist = match ? (parseInt(match.totalDist) || 0) : null;
+        const destDist = match ? (parseInt(match.dist) || 0) : 0;
+        const roundTrip = destDist * 2; // 单次往返飞行距离 (A-B-A)
+        const newDistNum = (row.newDist !== '' && !isNaN(parseInt(row.newDist))) ? parseInt(row.newDist) : null;
+
+        let errorType = null;
+        let errorMsg = '';
+        let diffHtml = '';
+
+        if (!isMatched) {
+            errorType = 'unmatched';
+            errorMsg = '未匹配到飞机';
+        } else if (newDistNum === null) {
+            errorType = 'invalid_dist';
+            errorMsg = '距离未识别';
+        } else if (oldDist !== null && newDistNum < oldDist) {
+            errorType = 'decreased';
+            errorMsg = `距离减少 (-${(oldDist - newDistNum).toLocaleString()} nm)`;
+        } else {
+            const diff = newDistNum - oldDist;
+            if (diff === 0) {
+                // 距离未变（0 趟往返，合法）
+                diffHtml = `<span style="color:var(--text3); font-weight:500;"><i class="fa-solid fa-minus"></i> 保持相同</span>`;
+            } else if (roundTrip <= 0) {
+                // 飞机数据中未配置目的地单程航程
+                errorType = 'no_dest_dist';
+                errorMsg = `单程航程未设置，无法核验往返倍数`;
+            } else if (diff % roundTrip !== 0) {
+                // 核心防呆：增加的距离不是单程航程 2 倍的整数倍！
+                const remainder = diff % roundTrip;
+                errorType = 'not_multiple';
+                errorMsg = `+${diff.toLocaleString()} nm 非往返 (${roundTrip.toLocaleString()} nm) 倍数 (余 ${remainder.toLocaleString()} nm)`;
+            } else {
+                // 校验完全通过
+                const trips = diff / roundTrip;
+                diffHtml = `<span style="color:var(--green); font-weight:600;"><i class="fa-solid fa-circle-check"></i> +${diff.toLocaleString()} nm (${trips} 趟往返)</span>`;
+            }
+        }
+
+        return {
+            match,
+            isMatched,
+            oldDist,
+            destDist,
+            roundTrip,
+            newDistNum,
+            isValid: errorType === null,
+            errorType,
+            errorMsg,
+            diffHtml
+        };
+    }
+
     window.openQuickDistModal = function() {
         const list = document.getElementById('qd-reg-list');
         if (list) {
             list.innerHTML = [...fleet].sort((a, b) => (a.reg || '').localeCompare(b.reg || ''))
-                .map(a => `<option value="${a.reg || ''}">${a.icao || ''} · 当前 ${a.totalDist ? Number(a.totalDist).toLocaleString() : 0} nm</option>`).join('');
+                .map(a => `<option value="${a.reg || ''}">${a.icao || ''} · 当前 ${a.totalDist ? Number(a.totalDist).toLocaleString() : 0} nm (单程 ${a.dist || 0} nm)</option>`).join('');
         }
         const regEl = document.getElementById('qd-reg'); if (regEl) regEl.value = '';
         const distEl = document.getElementById('qd-dist'); if (distEl) { distEl.value = ''; distEl.removeAttribute('placeholder'); }
@@ -4222,18 +4293,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tab === 'manual') setTimeout(() => { const el = document.getElementById('qd-reg'); if (el) el.focus(); }, 50);
     };
 
+    // 手动录入 - 实时匹配与当前里程、往返基数提示
     window.onQdRegInput = function() {
         const input = document.getElementById('qd-reg');
         const infoEl = document.getElementById('qd-match-info');
         const distInput = document.getElementById('qd-dist');
+        const applyBtn = document.getElementById('qd-manual-apply-btn');
         if (!input || !infoEl) return;
         const val = input.value.trim().toUpperCase();
         if (!val) { infoEl.textContent = ''; return; }
         const match = fleet.find(a => (a.reg || '').toUpperCase() === val);
         if (match) {
-            infoEl.innerHTML = `✅ 匹配到 <strong style="color:var(--cyan)">${match.icao}</strong>，当前累计总距离：<strong>${match.totalDist ? Number(match.totalDist).toLocaleString() : '未记录'}</strong> nm`;
+            const curDist = parseInt(match.totalDist) || 0;
+            const destDist = parseInt(match.dist) || 0;
+            const roundTrip = destDist * 2;
+            infoEl.innerHTML = `✅ 匹配到 <strong style="color:var(--cyan)">${match.icao}</strong> · 当前总距离 <strong>${curDist.toLocaleString()}</strong> nm<br><span style="color:var(--text3); font-size:11px;">单程航程: ${destDist.toLocaleString()} nm ➔ 单次往返基数: <strong style="color:var(--amber)">${roundTrip.toLocaleString()}</strong> nm（每次增量须为该基数整倍数）</span>`;
             infoEl.style.color = 'var(--green)';
-            if (distInput) distInput.placeholder = `当前 ${match.totalDist || 0}`;
+            if (distInput) {
+                distInput.placeholder = `当前 ${curDist.toLocaleString()}`;
+                distInput.min = curDist;
+            }
+            if (applyBtn) { applyBtn.disabled = false; applyBtn.style.opacity = '1'; applyBtn.style.cursor = 'pointer'; }
         } else {
             infoEl.textContent = '⚠️ 未找到该注册号对应的飞机，请检查输入';
             infoEl.style.color = 'var(--amber)';
@@ -4241,6 +4321,64 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // 手动录入 - 距离输入实时防呆拦截与倍数校验（附智能建议值）
+    window.onQdDistInput = function() {
+        const regInput = document.getElementById('qd-reg');
+        const distInput = document.getElementById('qd-dist');
+        const infoEl = document.getElementById('qd-match-info');
+        const applyBtn = document.getElementById('qd-manual-apply-btn');
+        if (!regInput || !distInput || !infoEl) return;
+        const reg = regInput.value.trim().toUpperCase();
+        const match = fleet.find(a => (a.reg || '').toUpperCase() === reg);
+        if (!match) return;
+
+        const oldDist = parseInt(match.totalDist) || 0;
+        const destDist = parseInt(match.dist) || 0;
+        const roundTrip = destDist * 2;
+        const val = distInput.value;
+
+        if (val !== '' && !isNaN(parseInt(val))) {
+            const num = parseInt(val);
+
+            // 1. 拦截距离减少
+            if (num < oldDist) {
+                infoEl.innerHTML = `<span style="color:var(--red)"><i class="fa-solid fa-ban"></i> 距离减少拦截：输入值 (${num.toLocaleString()} nm) 小于当前记录 (${oldDist.toLocaleString()} nm)，禁止确认！</span>`;
+                if (applyBtn) { applyBtn.disabled = true; applyBtn.style.opacity = '0.4'; applyBtn.style.cursor = 'not-allowed'; }
+                return;
+            }
+
+            const diff = num - oldDist;
+
+            // 2. 距离不变
+            if (diff === 0) {
+                infoEl.innerHTML = `✅ 匹配到 <strong style="color:var(--cyan)">${match.icao}</strong>，距离保持不变 (${oldDist.toLocaleString()} nm)`;
+                if (applyBtn) { applyBtn.disabled = false; applyBtn.style.opacity = '1'; applyBtn.style.cursor = 'pointer'; }
+                return;
+            }
+
+            // 3. 检查单程航程是否配置
+            if (roundTrip <= 0) {
+                infoEl.innerHTML = `<span style="color:var(--red)"><i class="fa-solid fa-triangle-exclamation"></i> 该飞机单程航程未设置或为 0，无法计算往返倍数，请先至机队完善航程！</span>`;
+                if (applyBtn) { applyBtn.disabled = true; applyBtn.style.opacity = '0.4'; applyBtn.style.cursor = 'not-allowed'; }
+                return;
+            }
+
+            // 4. 拦截非往返整数倍
+            if (diff % roundTrip !== 0) {
+                const rem = diff % roundTrip;
+                const lowerValid = num - rem;
+                const upperValid = lowerValid + roundTrip;
+                infoEl.innerHTML = `<span style="color:var(--red)"><i class="fa-solid fa-ban"></i> <b>航程倍数错误</b>：增加了 ${diff.toLocaleString()} nm，不是单次往返 (${roundTrip.toLocaleString()} nm) 的整数倍！(余数: ${rem.toLocaleString()} nm)<br>💡 推荐校验值：<a href="javascript:void(0)" onclick="document.getElementById('qd-dist').value=${lowerValid}; window.onQdDistInput();" style="color:var(--cyan); text-decoration:underline;">${lowerValid.toLocaleString()}</a> nm 或 <a href="javascript:void(0)" onclick="document.getElementById('qd-dist').value=${upperValid}; window.onQdDistInput();" style="color:var(--cyan); text-decoration:underline;">${upperValid.toLocaleString()}</a> nm</span>`;
+                if (applyBtn) { applyBtn.disabled = true; applyBtn.style.opacity = '0.4'; applyBtn.style.cursor = 'not-allowed'; }
+            } else {
+                const trips = diff / roundTrip;
+                infoEl.innerHTML = `✅ 匹配到 <strong style="color:var(--cyan)">${match.icao}</strong>：累计增加 <strong style="color:var(--green)">+${diff.toLocaleString()} nm</strong>（整好完成 <strong>${trips}</strong> 趟往返，校验通过）`;
+                if (applyBtn) { applyBtn.disabled = false; applyBtn.style.opacity = '1'; applyBtn.style.cursor = 'pointer'; }
+            }
+        }
+    };
+
+    // 手动录入确认保存
     window.applyQuickDistManual = function() {
         const regInput = document.getElementById('qd-reg');
         const distInput = document.getElementById('qd-dist');
@@ -4250,36 +4388,64 @@ document.addEventListener('DOMContentLoaded', () => {
         if (distVal === '' || isNaN(parseInt(distVal))) { toast('请输入有效的总距离数值', true); distInput.focus(); return; }
         const idx = fleet.findIndex(a => (a.reg || '').toUpperCase() === reg);
         if (idx < 0) { toast(`未找到注册号为 ${reg} 的飞机`, true); return; }
-        const oldVal = fleet[idx].totalDist;
-        if (typeof bankMileageUpdate === 'function') bankMileageUpdate(idx, parseInt(distVal));
-        else fleet[idx].totalDist = parseInt(distVal);
+
+        const oldVal = parseInt(fleet[idx].totalDist) || 0;
+        const destDist = parseInt(fleet[idx].dist) || 0;
+        const roundTrip = destDist * 2;
+        const newDistNum = parseInt(distVal);
+
+        if (newDistNum < oldVal) {
+            toast(`防呆拦截：新的总距离 (${newDistNum.toLocaleString()} nm) 不能少于当前记录 (${oldVal.toLocaleString()} nm)！`, true);
+            distInput.focus();
+            return;
+        }
+
+        const diff = newDistNum - oldVal;
+        if (diff > 0) {
+            if (roundTrip <= 0) {
+                toast(`错误：该飞机单程航程未设置，无法核验往返倍数！`, true);
+                return;
+            }
+            if (diff % roundTrip !== 0) {
+                toast(`防呆拦截：增加的 ${diff.toLocaleString()} nm 必须是单次往返 (${roundTrip.toLocaleString()} nm) 的整数倍！`, true);
+                distInput.focus();
+                return;
+            }
+        }
+
+        if (typeof bankMileageUpdate === 'function') bankMileageUpdate(idx, newDistNum);
+        else fleet[idx].totalDist = newDistNum;
         fleet[idx].updatedAt = new Date().toISOString();
         fleet[idx].changelog = fleet[idx].changelog || [];
-        fleet[idx].changelog.unshift({ time: new Date().toISOString(), changes: [`<strong>累计总距离</strong>: ${oldVal || '空'} ➔ ${distVal}（极速更新）`] });
+        fleet[idx].changelog.unshift({ time: new Date().toISOString(), changes: [`<strong>累计总距离</strong>: ${oldVal || '0'} ➔ ${newDistNum}（极速更新）`] });
         persistFleet();
         if (typeof renderFleet === 'function') renderFleet();
         if (typeof syncFilters === 'function') syncFilters();
-        toast(`${reg} 累计总距离已更新为 ${parseInt(distVal).toLocaleString()} nm`);
-        // 清空以便连续录入下一架，不关闭弹窗
+        toast(`${reg} 累计总距离已成功更新为 ${newDistNum.toLocaleString()} nm`);
+
         regInput.value = ''; distInput.value = ''; distInput.removeAttribute('placeholder');
         document.getElementById('qd-match-info').textContent = '';
         regInput.focus();
     };
 
+    // 渲染 OCR 批量审核表格并执行全局防呆校验
     function qdRenderReviewTable() {
         const tbody = document.getElementById('qd-review-tbody');
         const wrap = document.getElementById('qd-review-wrap');
+        const applyBtn = document.getElementById('qd-batch-apply-btn');
+        const summaryEl = document.getElementById('qd-validation-summary');
+        const checkAllEl = document.getElementById('qd-check-all');
         if (!tbody || !wrap) return;
         wrap.style.display = qdReviewRows.length ? 'block' : 'none';
 
-        // 1. 找出本次已经成功匹配的飞机 ID 集合
+        // 1. 收集已匹配飞机
         const matchedIds = new Set();
         qdReviewRows.forEach(row => {
             const match = qdFindMatch(row.reg);
             if (match) matchedIds.add(match.id);
         });
 
-        // 2. 生成动态候选列表（仅包含当前未被本次更新匹配到的飞机）
+        // 2. 生成未匹配飞机下拉清单
         const unmatchedFleet = fleet.filter(a => !matchedIds.has(a.id));
         let datalistEl = document.getElementById('qd-dynamic-unmatched-list');
         if (!datalistEl) {
@@ -4289,68 +4455,166 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         datalistEl.innerHTML = unmatchedFleet.map(a => `<option value="${a.reg}">${a.icao} · ${a.base || '—'}</option>`).join('');
 
-        // 3. 表格渲染：新增原图切片列，输入框绑定候选列表
-        tbody.innerHTML = qdReviewRows.map(row => {
-            const match = qdFindMatch(row.reg);
-            row.matchedId = match ? match.id : null;
-            const oldDist = match ? (parseInt(match.totalDist) || 0) : null;
-            const isMatched = !!match;
-            const matchHtml = isMatched
-                ? `<span style="color:var(--cyan); font-weight:600;">${match.reg}</span> <span style="color:var(--text3)">(${match.icao})</span>`
-                : `<span style="color:var(--amber)"><i class="fa-solid fa-triangle-exclamation"></i> 未匹配</span>`;
+        let totalChecked = 0;
+        let errorCount = 0;
+        let decreasedCount = 0;
+        let notMultipleCount = 0;
+        let unmatchedCount = 0;
 
-            return `<tr data-row-id="${row.id}" style="${!isMatched ? 'background: rgba(245, 193, 92, 0.08);' : ''}">
+        // 3. 逐行校验并生成 HTML
+        tbody.innerHTML = qdReviewRows.map(row => {
+            const val = qdValidateRow(row);
+            row.matchedId = val.match ? val.match.id : null;
+
+            if (row.checked) {
+                totalChecked++;
+                if (!val.isValid) {
+                    errorCount++;
+                    if (val.errorType === 'decreased') decreasedCount++;
+                    else if (val.errorType === 'not_multiple') notMultipleCount++;
+                    else unmatchedCount++;
+                }
+            }
+
+            const isMatched = val.isMatched;
+            const matchHtml = isMatched
+                ? `<span style="color:var(--cyan); font-weight:600;">${val.match.reg}</span> <span style="color:var(--text3)">(${val.match.icao} · 往返 ${val.roundTrip}nm)</span>`
+                : `<span style="color:var(--amber); font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> 未识别成功</span>`;
+
+            let statusHtml = '';
+            let rowBg = '';
+            let distInputStyle = '';
+
+            if (val.errorType === 'decreased') {
+                rowBg = 'background: rgba(251, 113, 133, 0.12);';
+                distInputStyle = 'border-color: var(--red); color: var(--red); font-weight: 700;';
+                statusHtml = `<span style="color:var(--red); font-weight:600; font-size:11px;"><i class="fa-solid fa-circle-xmark"></i> ${val.errorMsg}</span>`;
+            } else if (val.errorType === 'not_multiple') {
+                rowBg = 'background: rgba(251, 113, 133, 0.10);';
+                distInputStyle = 'border-color: var(--red); color: var(--red); font-weight: 700;';
+                statusHtml = `<span style="color:var(--red); font-weight:600; font-size:11px;"><i class="fa-solid fa-circle-xmark"></i> ${val.errorMsg}</span>`;
+            } else if (val.errorType === 'unmatched') {
+                rowBg = 'background: rgba(245, 193, 92, 0.08);';
+                statusHtml = `<span style="color:var(--amber); font-weight:600; font-size:11px;"><i class="fa-solid fa-triangle-exclamation"></i> 需校对注册号</span>`;
+            } else if (val.errorType === 'invalid_dist' || val.errorType === 'no_dest_dist') {
+                rowBg = 'background: rgba(245, 193, 92, 0.08);';
+                distInputStyle = 'border-color: var(--amber);';
+                statusHtml = `<span style="color:var(--amber); font-weight:600; font-size:11px;"><i class="fa-solid fa-triangle-exclamation"></i> ${val.errorMsg}</span>`;
+            } else {
+                statusHtml = val.diffHtml;
+            }
+
+            return `<tr data-row-id="${row.id}" style="${rowBg}">
                 <td style="padding:8px; text-align:center;"><input type="checkbox" ${row.checked ? 'checked' : ''} onchange="qdRowCheckChanged('${row.id}', this.checked)"></td>
                 <td style="padding:8px; text-align:center;">
                     ${row.thumb ? `<img src="${row.thumb}" style="height:22px; border-radius:3px; border:1px solid var(--border); vertical-align:middle; cursor:zoom-in;" onclick="window.open('${row.thumb}')" title="点击放大查看原图截图">` : '—'}
                 </td>
                 <td style="padding:8px;">
                     <input type="text" list="qd-dynamic-unmatched-list" value="${row.reg || ''}" 
-                          placeholder="双击选漏网飞机"
-                          style="width:110px; font-family:var(--mono); text-transform:uppercase; padding:4px 6px; ${!isMatched ? 'border-color:var(--amber); color:var(--amber);' : ''}" 
+                          placeholder="双击选飞机"
+                          style="width:110px; font-family:var(--mono); text-transform:uppercase; padding:4px 6px; ${!isMatched ? 'border-color:var(--amber); color:var(--amber); font-weight:600;' : ''}" 
                           onchange="qdRowRegChanged('${row.id}', this.value)">
                 </td>
                 <td style="padding:8px;">${matchHtml}</td>
-                <td style="padding:8px;">
-                    <span style="color:var(--text3)">${oldDist !== null ? oldDist.toLocaleString() : '—'}</span> 
-                    <i class="fa-solid fa-arrow-right" style="color:var(--text3); font-size:10px;"></i> 
-                    <input type="number" value="${row.newDist}" style="width:90px; padding:4px 6px;" onchange="qdRowDistChanged('${row.id}', this.value)">
+                <td style="padding:8px; white-space:nowrap;">
+                    <span style="color:var(--text3); font-family:var(--mono);">${val.oldDist !== null ? val.oldDist.toLocaleString() : '—'}</span> 
+                    <i class="fa-solid fa-arrow-right" style="color:var(--text3); font-size:10px; margin:0 4px;"></i> 
+                    <input type="number" value="${row.newDist}" style="width:95px; padding:4px 6px; font-family:var(--mono); ${distInputStyle}" onchange="qdRowDistChanged('${row.id}', this.value)">
+                </td>
+                <td style="padding:8px; white-space:nowrap;">
+                    ${statusHtml}
                 </td>
             </tr>`;
         }).join('');
+
+        if (checkAllEl) {
+            checkAllEl.checked = qdReviewRows.length > 0 && qdReviewRows.every(r => r.checked);
+        }
+
+        // 4. 底部状态与按钮禁用逻辑
+        if (applyBtn) {
+            if (totalChecked === 0) {
+                applyBtn.disabled = true;
+                applyBtn.style.opacity = '0.4';
+                applyBtn.style.cursor = 'not-allowed';
+                if (summaryEl) summaryEl.innerHTML = `<span style="color:var(--text3);"><i class="fa-solid fa-circle-info"></i> 请勾选需要更新的飞机条目</span>`;
+            } else if (errorCount > 0) {
+                applyBtn.disabled = true;
+                applyBtn.style.opacity = '0.4';
+                applyBtn.style.cursor = 'not-allowed';
+                const msgs = [];
+                if (unmatchedCount > 0) msgs.push(`${unmatchedCount} 项未识别成功`);
+                if (decreasedCount > 0) msgs.push(`${decreasedCount} 项距离减少`);
+                if (notMultipleCount > 0) msgs.push(`${notMultipleCount} 项非往返倍数`);
+                if (summaryEl) {
+                    summaryEl.innerHTML = `<span style="color:var(--red);"><i class="fa-solid fa-ban"></i> <b>禁止确认</b>：检测到 ${msgs.join('，')}，请对照截图手动校对修正！</span>`;
+                }
+            } else {
+                applyBtn.disabled = false;
+                applyBtn.style.opacity = '1';
+                applyBtn.style.cursor = 'pointer';
+                if (summaryEl) {
+                    summaryEl.innerHTML = `<span style="color:var(--green);"><i class="fa-solid fa-circle-check"></i> 全部 ${totalChecked} 项校验通过（均满足往返里程整倍数），可安全应用</span>`;
+                }
+            }
+        }
     }
 
-    window.qdRowCheckChanged = function(id, val) { const r = qdReviewRows.find(x => x.id === id); if (r) r.checked = val; };
+    // 交互监听
+    window.qdRowCheckChanged = function(id, val) { const r = qdReviewRows.find(x => x.id === id); if (r) { r.checked = val; qdRenderReviewTable(); } };
     window.qdRowRegChanged = function(id, val) { const r = qdReviewRows.find(x => x.id === id); if (r) { r.reg = val.trim().toUpperCase(); qdRenderReviewTable(); } };
-    window.qdRowDistChanged = function(id, val) { const r = qdReviewRows.find(x => x.id === id); if (r) r.newDist = val; };
+    window.qdRowDistChanged = function(id, val) { const r = qdReviewRows.find(x => x.id === id); if (r) { r.newDist = val; qdRenderReviewTable(); } };
     window.qdToggleAll = function(checked) { qdReviewRows.forEach(r => r.checked = checked); qdRenderReviewTable(); };
 
+    // 批量确认提交（严格双重校验）
     window.applyQuickDistBatch = function() {
-        let applied = 0, skipped = 0;
-        qdReviewRows.forEach(row => {
-            if (!row.checked) return;
+        for (const row of qdReviewRows) {
+            if (!row.checked) continue;
+            const val = qdValidateRow(row);
+            if (!val.isValid) {
+                toast(`无法应用更新：${row.reg || '未识别飞机'} 存在校验错误（${val.errorMsg}），请先手动校对！`, true);
+                qdRenderReviewTable();
+                return;
+            }
+        }
+
+        let applied = 0;
+        for (const row of qdReviewRows) {
+            if (!row.checked) continue;
             const match = qdFindMatch(row.reg);
             const distNum = parseInt(row.newDist);
-            if (!match || isNaN(distNum)) { skipped++; return; }
+            if (!match || isNaN(distNum)) continue;
             const idx = fleet.findIndex(a => a.id === match.id);
-            if (idx < 0) { skipped++; return; }
-            const oldVal = fleet[idx].totalDist;
+            if (idx < 0) continue;
+
+            const oldVal = parseInt(fleet[idx].totalDist) || 0;
+            const destDist = parseInt(fleet[idx].dist) || 0;
+            const roundTrip = destDist * 2;
+            const diff = distNum - oldVal;
+
+            if (diff < 0) continue;
+            if (diff > 0 && roundTrip > 0 && diff % roundTrip !== 0) continue;
+
             if (typeof bankMileageUpdate === 'function') bankMileageUpdate(idx, distNum);
             else fleet[idx].totalDist = distNum;
             fleet[idx].updatedAt = new Date().toISOString();
             fleet[idx].changelog = fleet[idx].changelog || [];
-            fleet[idx].changelog.unshift({ time: new Date().toISOString(), changes: [`<strong>累计总距离</strong>: ${oldVal || '空'} ➔ ${distNum}（OCR批量更新）`] });
+            fleet[idx].changelog.unshift({ time: new Date().toISOString(), changes: [`<strong>累计总距离</strong>: ${oldVal || '0'} ➔ ${distNum}（OCR批量更新 · 增加 ${diff}nm）`] });
             applied++;
-        });
+        }
+
         if (applied > 0) {
             persistFleet();
             if (typeof renderFleet === 'function') renderFleet();
             if (typeof syncFilters === 'function') syncFilters();
+            toast(`已成功批量更新 ${applied} 架飞机的累计总距离！`);
+            window.closeQuickDistModal();
+        } else {
+            toast('未更新任何飞机，请确认勾选状态', true);
         }
-        toast(`已更新 ${applied} 架飞机的总距离${skipped ? '，' + skipped + ' 条因未匹配到飞机或数值无效被跳过' : ''}`, skipped > 0 && applied === 0);
-        if (applied > 0 && skipped === 0) window.closeQuickDistModal();
     };
 
+    // OCR 截图批量解析流程
     async function qdProcessOcrFiles(files) {
         const qdOcrStatus = document.getElementById('qd-ocr-status');
         const regionSet = PRECISE_OCR_REGIONS['1600x900'];
@@ -4361,7 +4625,7 @@ document.addEventListener('DOMContentLoaded', () => {
         qdReviewRows = [];
         document.getElementById('qd-review-wrap').style.display = 'none';
         try {
-            qdOcrStatus.innerHTML = `<span style="color:var(--cyan)"><i class="fa-solid fa-gear fa-spin"></i> 正在初始化识别引擎 (仅首次加载较慢)...</span>`;
+            qdOcrStatus.innerHTML = `<span style="color:var(--cyan)"><i class="fa-solid fa-gear fa-spin"></i> 正在初始化识别引擎 (首次加载较慢)...</span>`;
             const worker = await getTesseractWorker();
             const fileArr = Array.from(files);
             for (let i = 0; i < fileArr.length; i++) {
@@ -4371,22 +4635,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 const distCanvas = cropRegionFromImage(img, regionSet.fields.totalDist, { w: regionSet.w, h: regionSet.h });
                 const regResult = await worker.recognize(regCanvas);
                 const distResult = await worker.recognize(distCanvas);
-                // 在 worker.recognize(distCanvas) 之后：
+
                 const ocrReg = pxExtractRegCode(regResult.data.text || '') || '';
                 const ocrDist = pxExtractDistance(distResult.data.text || '');
-
-                // 【新增】：将注册号的裁剪区域生成缩略图 Base64
                 const regThumb = regCanvas.toDataURL('image/jpeg', 0.85);
 
                 qdReviewRows.push({
                     id: 'qdrow' + i + '_' + Date.now(),
                     reg: ocrReg,
                     newDist: ocrDist !== null ? ocrDist : '',
-                    thumb: regThumb, // 保存截图切片
+                    thumb: regThumb,
                     checked: true
                 });
             }
-            qdOcrStatus.innerHTML = `<span style="color:#10b981"><i class="fa-solid fa-circle-check"></i> 识别完成，共 ${fileArr.length} 张，请核对下方结果后再应用</span>`;
+
+            // 【核心要求】：识别出来之后，按照注册号 A-Z 升序排序
+            qdReviewRows.sort((a, b) => (a.reg || '').localeCompare(b.reg || ''));
+
+            qdOcrStatus.innerHTML = `<span style="color:#10b981"><i class="fa-solid fa-circle-check"></i> 识别完成，共 ${fileArr.length} 张，已按注册号 A-Z 排序，请校对后确认</span>`;
             qdRenderReviewTable();
         } catch (err) {
             console.error('Quick-dist OCR error:', err);
