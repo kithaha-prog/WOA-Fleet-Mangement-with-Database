@@ -2761,13 +2761,14 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
           <div style="max-height:320px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;">
             <table style="width:100%; font-size:12px; border-collapse:collapse;">
               <thead style="position:sticky; top:0; background:var(--bg-hover); z-index:1;">
-                <tr>
-                  <th style="padding:8px; text-align:center;"><input type="checkbox" id="qd-check-all" checked onchange="qdToggleAll(this.checked)"></th>
-                  <th style="padding:8px; text-align:left;">识别注册号（可修正）</th>
-                  <th style="padding:8px; text-align:left;">匹配到的飞机</th>
-                  <th style="padding:8px; text-align:left;">旧距离 → 新距离（可修正）</th>
-                </tr>
-              </thead>
+              <tr>
+                <th style="padding:8px; text-align:center;"><input type="checkbox" id="qd-check-all" checked onchange="qdToggleAll(this.checked)"></th>
+                <th style="padding:8px; text-align:center;">原图裁剪</th>
+                <th style="padding:8px; text-align:left;">识别注册号（可修正）</th>
+                <th style="padding:8px; text-align:left;">匹配到的飞机</th>
+                <th style="padding:8px; text-align:left;">旧距离 → 新距离（可修正）</th>
+              </tr>
+            </thead>
               <tbody id="qd-review-tbody"></tbody>
             </table>
           </div>
@@ -3539,10 +3540,22 @@ const HEADERS = [
 ];
 const DEFAULT_COLS = HEADERS.map(h => h.id);
 let visibleColumns = [];
-try { visibleColumns = JSON.parse(localStorage.getItem('woa_visible_cols')); if (!Array.isArray(visibleColumns) || visibleColumns.length === 0) visibleColumns = DEFAULT_COLS; } 
-catch(e) { visibleColumns = DEFAULT_COLS; }
-// 确保新列自动出现在表格中，不会被浏览器旧缓存隐藏
-HEADERS.forEach(h => { if (!visibleColumns.includes(h.id)) visibleColumns.push(h.id); });
+try { 
+    visibleColumns = JSON.parse(localStorage.getItem('woa_visible_cols')); 
+} catch(e) { 
+    visibleColumns = null; 
+}
+
+// 只有当本地完全没有保存过配置（即第一次打开）时，才默认全选
+if (!Array.isArray(visibleColumns) || visibleColumns.length === 0) {
+    visibleColumns = DEFAULT_COLS;
+} else {
+    // 如果以后系统更新新增了列，可以安全地将新列追加到末尾（但绝不强行恢复用户手动取消的列）
+    HEADERS.forEach(h => {
+        // 注：这里改成只追加全新出现的、且用户从未配置过的列（可根据需求决定是否保留这行防漏机制）
+        // 如果想彻底尊重用户选择，直接让用户通过"恢复默认"来添加新列即可
+    });
+}
 
 // Column Order (任务 2.3 拖拽排序)
 // Column Order (带自动纠偏与补齐)
@@ -3619,6 +3632,9 @@ document.addEventListener('DOMContentLoaded', () => {
     ocrFileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) handleOcrProcessing(e.target.files);
     });
+
+    const lastView = localStorage.getItem('woa_active_view') || 'analytics';
+    showView(lastView);
 
     // 4.5 精确点位扫描模式：开关 + 分辨率选择
     const precOcrToggleBtn = document.getElementById('toggle-precise-ocr-btn');
@@ -4255,18 +4271,51 @@ document.addEventListener('DOMContentLoaded', () => {
         const wrap = document.getElementById('qd-review-wrap');
         if (!tbody || !wrap) return;
         wrap.style.display = qdReviewRows.length ? 'block' : 'none';
+
+        // 1. 找出本次已经成功匹配的飞机 ID 集合
+        const matchedIds = new Set();
+        qdReviewRows.forEach(row => {
+            const match = qdFindMatch(row.reg);
+            if (match) matchedIds.add(match.id);
+        });
+
+        // 2. 生成动态候选列表（仅包含当前未被本次更新匹配到的飞机）
+        const unmatchedFleet = fleet.filter(a => !matchedIds.has(a.id));
+        let datalistEl = document.getElementById('qd-dynamic-unmatched-list');
+        if (!datalistEl) {
+            datalistEl = document.createElement('datalist');
+            datalistEl.id = 'qd-dynamic-unmatched-list';
+            document.body.appendChild(datalistEl);
+        }
+        datalistEl.innerHTML = unmatchedFleet.map(a => `<option value="${a.reg}">${a.icao} · ${a.base || '—'}</option>`).join('');
+
+        // 3. 表格渲染：新增原图切片列，输入框绑定候选列表
         tbody.innerHTML = qdReviewRows.map(row => {
             const match = qdFindMatch(row.reg);
             row.matchedId = match ? match.id : null;
             const oldDist = match ? (parseInt(match.totalDist) || 0) : null;
-            const matchHtml = match
+            const isMatched = !!match;
+            const matchHtml = isMatched
                 ? `<span style="color:var(--cyan); font-weight:600;">${match.reg}</span> <span style="color:var(--text3)">(${match.icao})</span>`
                 : `<span style="color:var(--amber)"><i class="fa-solid fa-triangle-exclamation"></i> 未匹配</span>`;
-            return `<tr data-row-id="${row.id}">
+
+            return `<tr data-row-id="${row.id}" style="${!isMatched ? 'background: rgba(245, 193, 92, 0.08);' : ''}">
                 <td style="padding:8px; text-align:center;"><input type="checkbox" ${row.checked ? 'checked' : ''} onchange="qdRowCheckChanged('${row.id}', this.checked)"></td>
-                <td style="padding:8px;"><input type="text" value="${row.reg || ''}" style="width:100px; font-family:var(--mono); text-transform:uppercase; padding:4px 6px;" onchange="qdRowRegChanged('${row.id}', this.value)"></td>
+                <td style="padding:8px; text-align:center;">
+                    ${row.thumb ? `<img src="${row.thumb}" style="height:22px; border-radius:3px; border:1px solid var(--border); vertical-align:middle; cursor:zoom-in;" onclick="window.open('${row.thumb}')" title="点击放大查看原图截图">` : '—'}
+                </td>
+                <td style="padding:8px;">
+                    <input type="text" list="qd-dynamic-unmatched-list" value="${row.reg || ''}" 
+                          placeholder="双击选漏网飞机"
+                          style="width:110px; font-family:var(--mono); text-transform:uppercase; padding:4px 6px; ${!isMatched ? 'border-color:var(--amber); color:var(--amber);' : ''}" 
+                          onchange="qdRowRegChanged('${row.id}', this.value)">
+                </td>
                 <td style="padding:8px;">${matchHtml}</td>
-                <td style="padding:8px;"><span style="color:var(--text3)">${oldDist !== null ? oldDist.toLocaleString() : '—'}</span> <i class="fa-solid fa-arrow-right" style="color:var(--text3); font-size:10px;"></i> <input type="number" value="${row.newDist}" style="width:90px; padding:4px 6px;" onchange="qdRowDistChanged('${row.id}', this.value)"></td>
+                <td style="padding:8px;">
+                    <span style="color:var(--text3)">${oldDist !== null ? oldDist.toLocaleString() : '—'}</span> 
+                    <i class="fa-solid fa-arrow-right" style="color:var(--text3); font-size:10px;"></i> 
+                    <input type="number" value="${row.newDist}" style="width:90px; padding:4px 6px;" onchange="qdRowDistChanged('${row.id}', this.value)">
+                </td>
             </tr>`;
         }).join('');
     }
@@ -4322,12 +4371,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 const distCanvas = cropRegionFromImage(img, regionSet.fields.totalDist, { w: regionSet.w, h: regionSet.h });
                 const regResult = await worker.recognize(regCanvas);
                 const distResult = await worker.recognize(distCanvas);
+                // 在 worker.recognize(distCanvas) 之后：
                 const ocrReg = pxExtractRegCode(regResult.data.text || '') || '';
                 const ocrDist = pxExtractDistance(distResult.data.text || '');
+
+                // 【新增】：将注册号的裁剪区域生成缩略图 Base64
+                const regThumb = regCanvas.toDataURL('image/jpeg', 0.85);
+
                 qdReviewRows.push({
                     id: 'qdrow' + i + '_' + Date.now(),
                     reg: ocrReg,
                     newDist: ocrDist !== null ? ocrDist : '',
+                    thumb: regThumb, // 保存截图切片
                     checked: true
                 });
             }
@@ -6131,6 +6186,9 @@ window.addEventListener('DOMContentLoaded', () => {
     setViewMode(currentViewMode, true); 
     setRatingBasis(currentRatingBasis, true); // <--- 新增这行初始化评级按钮状态
     setupCountryRowClickHandlers();
+    syncFilters();         // 1. 先把机队中现有的 Base/Type 等填充到下拉框
+    restoreFleetFilters(); // 2. 回填之前保存的选中值
+    renderFleet();         // 3. 执行一次渲染呈现筛选结果
 });
 
 // 点击设置面板/列设置面板外部区域时自动收起
@@ -6155,6 +6213,7 @@ function runGlobalSearch() {
 }
 
 function showView(name, el) {
+  localStorage.setItem('woa_active_view', name);
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
@@ -6217,6 +6276,57 @@ function syncFilters() {
   }
   
   document.getElementById('fleet-badge').textContent = fleet.length;
+}
+
+// 需要持久化记忆的机队筛选器 ID 列表
+const FLEET_FILTER_IDS = [
+  'fleet-search', // 搜索框
+  'ff-airport',    // 基地筛选
+  'ff-type',       // 机型筛选
+  'ff-load',       // 载荷客货类型
+  'ff-size',       // 尺寸分级
+  'ff-seats',      // 客舱配置
+  'ff-limit',      // 每页显示条数
+  'ff-rating'      // 评级筛选
+];
+
+// 保存当前筛选条件到 localStorage
+function saveFleetFilters() {
+  const state = {};
+  FLEET_FILTER_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) state[id] = el.value;
+  });
+  localStorage.setItem('woa_fleet_filters', JSON.stringify(state));
+}
+
+// 刷新页面后从 localStorage 恢复筛选条件
+function restoreFleetFilters() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('woa_fleet_filters') || '{}');
+    FLEET_FILTER_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && saved[id] !== undefined) {
+        el.value = saved[id];
+      }
+    });
+  } catch (e) {
+    console.error('恢复筛选条件失败:', e);
+  }
+}
+
+// 供用户一键重置清空所有筛选（可选）
+function resetFleetFilters() {
+  localStorage.removeItem('woa_fleet_filters');
+  FLEET_FILTER_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (id === 'ff-limit') el.value = '10'; // 恢复默认 10 条/页
+      else el.value = '';
+    }
+  });
+  currentPage = 1;
+  renderFleet();
 }
 
 // ═══════════════════════════════════════════════
@@ -8031,6 +8141,7 @@ function jumpToPage() {
 }
 
 function renderFleet() {
+  saveFleetFilters();
   const search = (document.getElementById('fleet-search').value||'').toLowerCase();
   const apt = document.getElementById('ff-airport').value; const type = document.getElementById('ff-type').value; 
   const ld = document.getElementById('ff-load').value; const sz = document.getElementById('ff-size').value; const seats = document.getElementById('ff-seats').value;
