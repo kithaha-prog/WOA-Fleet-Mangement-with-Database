@@ -86,11 +86,12 @@ const DB = [
 {icao: 'CRJ7', mfr: 'Bombardier', fullmfr: 'CRJ700', size: 'B', load: 'Passenger', crew: 4, small: 1750, large: 17500, price: 35000},
 {icao: 'CRJ9', mfr: 'Bombardier', fullmfr: 'CRJ900', size: 'B', load: 'Passenger', crew: 4, small: 2100, large: 21000, price: 42000},
 {icao: 'CRJX', mfr: 'Bombardier', fullmfr: 'CRJ1000', size: 'B', load: 'Passenger', crew: 4, small: 2250, large: 22500, price: 45000},
-{icao: 'DH64', mfr: 'De Havilland', fullmfr: 'DH.106 Comet 4', size: 'D', load: 'Passenger', crew: 11, small: 80000, large: 800000, price: 1000000},
+{icao: 'DH64', mfr: 'de Havilland', fullmfr: 'DH.106 Comet 4', size: 'D', load: 'Passenger', crew: 11, small: 80000, large: 800000, price: 1000000},
 {icao: 'DH8B', mfr: 'De Havilland Canada', fullmfr: 'DHC-8 Q200', size: 'B', load: 'Passenger', crew: 4, small: 1050, large: 10500, price: 18000},
 {icao: 'DH8C', mfr: 'De Havilland Canada', fullmfr: 'DHC-8 Q300', size: 'B', load: 'Passenger', crew: 4, small: 1450, large: 14500, price: 25000},
 {icao: 'DH8D', mfr: 'De Havilland Canada', fullmfr: 'DHC-8 Q400', size: 'B', load: 'Passenger', crew: 4, small: 1650, large: 16500, price: 33000},
 {icao: 'DHC6', mfr: 'De Havilland Canada', fullmfr: 'DHC-6-300', size: 'A', load: 'Passenger', crew: 3, small: 500, large: 5000, price: 10000},
+{icao: 'DHC6F', mfr: 'De Havilland Canada', fullmfr: 'DHC-6-300F', size: 'A', load: 'Cargo', crew: 3, small: 625, large: 6250, price: 10000, loadamt: 1650},
 {icao: 'E135', mfr: 'Embraer', fullmfr: 'ERJ135', size: 'B', load: 'Passenger', crew: 3, small: 1125, large: 11250, price: 22500},
 {icao: 'E140', mfr: 'Embraer', fullmfr: 'ERJ140', size: 'B', load: 'Passenger', crew: 3, small: 1250, large: 12500, price: 25000},
 {icao: 'E145', mfr: 'Embraer', fullmfr: 'ERJ145', size: 'B', load: 'Passenger', crew: 3, small: 1350, large: 13500, price: 27000},
@@ -103,11 +104,14 @@ const DB = [
 {icao: 'E295', mfr: 'Embraer', fullmfr: 'E195-E2', size: 'C', load: 'Passenger', crew: 6, small: 3520, large: 35200, price: 85000},
 {icao: 'F100', mfr: 'Fokker', fullmfr: 'Fokker 100', size: 'C', load: 'Passenger', crew: 5, small: 2650, large: 26500, price: 48000},
 {icao: 'F70', mfr: 'Fokker', fullmfr: 'Fokker 70', size: 'B', load: 'Passenger', crew: 5, small: 2500, large: 25000, price: 38000},
+{icao: 'L410', mfr: 'Let', fullmfr: 'L-410UVP-E', size: 'A', load: 'Passenger', crew: 3, small: 625, large: 6250, price: 12500},
+{icao: 'L410F', mfr: 'Let', fullmfr: 'L-410UVP-EF', size: 'A', load: 'Cargo', crew: 3, small: 625, large: 6250, price: 12500, loadamt: 1800},
+{icao: 'L410NG', mfr: 'Let', fullmfr: 'L-410 NG', size: 'A', load: 'Passenger', crew: 3, small: 600, large: 6000, price: 13500},
+{icao: 'L410NGF', mfr: 'Let', fullmfr: 'L-410 NGF', size: 'A', load: 'Cargo', crew: 3, small: 600, large: 6000, price: 13500, loadamt: 2150},
 {icao: 'MD11', mfr: 'McDonnell Douglas', fullmfr: 'MD-11', size: 'D', load: 'Passenger', crew: 10, small: 19000, large: 190000, price: 295000},
 {icao: 'MD11F', mfr: 'McDonnell Douglas', fullmfr: 'MD-11F', size: 'D', load: 'Cargo', crew: 11, small: 19000, large: 190000, price: 295000, loadamt: 91185},
 {icao: 'SF34', mfr: 'Saab', fullmfr: 'Saab 340B', size: 'B', load: 'Passenger', crew: 3, small: 750, large: 7500, price: 15000},
 {icao: 'SF34F', mfr: 'Saab', fullmfr: 'Saab 340AF', size: 'B', load: 'Cargo', crew: 3, small: 750, large: 7500, price: 14500, loadamt: 3450},
-
 
 
 ];
