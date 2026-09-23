@@ -2069,25 +2069,33 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
     <!-- 工具与筛选栏 -->
     <div class="filter-bar" style="justify-content: space-between; flex-wrap: wrap;">
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <select id="mf-airport" onchange="renderMaintenance()">
-            <option value="">全部驻扎基地</option>
-        </select>
-        <select id="mf-status" onchange="renderMaintenance()">
-            <option value="">全部维保状态</option>
-            <option value="urgent">🔴 急需检修 (剩 ≤ 3 趟)</option>
-            <option value="warning">🟡 预警关注 (剩 4~8 趟)</option>
-            <option value="safe">🟢 状态充沛 (剩 9 趟以上)</option>
-        </select>
-        <select id="mf-sort" onchange="renderMaintenance()">
-            <option value="small_asc">按距小修剩余趟数 (最近在前 ↑)</option>
-            <option value="large_asc">按距大修剩余趟数 (最近在前 ↑)</option>
-            <option value="cost_desc">按预估检修费用 (最高在前 ↓)</option>
-            <option value="level_desc">按当前等级 (Lv.10 在前 ↓)</option>
-            <option value="reg_asc">按注册号 A-Z</option>
-        </select>
+          <select id="mf-airport" onchange="maintCurrentPage=1; renderMaintenance()">
+              <option value="">全部驻扎基地</option>
+          </select>
+          <select id="mf-status" onchange="maintCurrentPage=1; renderMaintenance()">
+              <option value="">全部维保状态</option>
+              <option value="urgent">🔴 急需检修 (剩 ≤ 3 趟)</option>
+              <option value="warning">🟡 预警关注 (剩 4~8 趟)</option>
+              <option value="safe">🟢 状态充沛 (剩 9 趟以上)</option>
+          </select>
+          <select id="mf-sort" onchange="maintCurrentPage=1; renderMaintenance()">
+              <option value="small_asc">按距小修剩余趟数 (最近在前 ↑)</option>
+              <option value="large_asc">按距大修剩余趟数 (最近在前 ↑)</option>
+              <option value="cost_desc">按预估检修费用 (最高在前 ↓)</option>
+              <option value="level_desc">按当前等级 (Lv.10 在前 ↓)</option>
+              <option value="reg_asc">按注册号 A-Z</option>
+          </select>
+
+          <!-- 👇 插入：分页数量下拉选择器（默认 5 条/页） 👇 -->
+          <select id="mf-limit" onchange="maintCurrentPage=1; renderMaintenance()">
+              <option value="5" selected>5 条/页</option>
+              <option value="10">10 条/页</option>
+              <option value="25">25 条/页</option>
+              <option value="50">50 条/页</option>
+          </select>
         </div>
         <div style="font-size:12.5px; color:var(--text3); font-family:var(--mono);" id="maint-record-count">
-        共 0 架飞机受控
+          共 0 架飞机受控
         </div>
     </div>
 
@@ -2109,6 +2117,20 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         </thead>
         <tbody id="maint-tbody"></tbody>
         </table>
+    </div>
+
+    <!-- 👇 插入：维保专属分页控制栏 👇 -->
+    <div id="maint-pagination" class="pagination-container" style="display: none;">
+        <button class="btn btn-ghost" onclick="changeMaintPage(-1)" id="btn-maint-prev"><i class="fa-solid fa-chevron-left"></i></button>
+        <span id="maint-page-info" style="font-size: 13px; color: var(--text2); font-family: var(--mono);">第 1 页 / 共 1 页</span>
+        <button class="btn btn-ghost" onclick="changeMaintPage(1)" id="btn-maint-next"><i class="fa-solid fa-chevron-right"></i></button>
+        
+        <div class="page-jump-wrap">
+            <span style="font-size: 12px; color: var(--text3);">前往</span>
+            <input type="number" id="maint-page-jump-input" class="page-jump-input" min="1" value="1">
+            <span style="font-size: 12px; color: var(--text3);">页</span>
+            <button class="page-jump-btn" onclick="jumpMaintPage()">跳转</button>
+        </div>
     </div>
     </section>
 
@@ -3080,32 +3102,27 @@ function calcPlaneMaintenance(a) {
   let currentCap = 1;
 
   while (true) {
-    const K = Math.min(stage, 10);
-    const need = K * maint;
-
-    // 进入该等级执行飞行前，必须确保具备该等级的点数门槛
-    // 新逻辑：只要检测到进行下一轮需要大修，先进行一次小修
-    if (pLarge < need) {
-      // 1. 先行进行一次小修
-      pSmall += 100;
-      smallChecksDone++;
+      const K = Math.min(stage, 10);
+      const need = K * maint;
       
-      // 2. 进行大修
-      pLarge += 400;
-      largeChecksDone++;
-    }
+      // 计算下一轮的飞行消耗门槛
+      const nextK = Math.min(stage + 1, 10);
+      const nextNeed = nextK * maint;
 
-    // 3. 后续若小修点数仍不够（或无大修但小修耗尽时），再正常补充小修
-    if (pSmall < need) {
-      pSmall += 100;
-      smallChecksDone++;
-    }
+      // 1. 常规门槛检查：如果当前这一轮本身都飞不完，必须补足
+      if (pSmall < need) { pSmall += 100; smallChecksDone++; }
+      if (pLarge < need) { pLarge += 400; largeChecksDone++; }
 
-    if (totalTrips >= tripsAccum + K) {
-      // 这 K 趟已经全部飞完，完整扣除本等级点数消耗
-      pSmall -= need;
-      pLarge -= need;
-      tripsAccum += K;
+      // 2. 【核心新增】超前预判：如果这轮飞完后大修剩余不够跑下一轮，在 0/K 阶段直接提前小修 +100
+      if ((pLarge - need) < nextNeed) {
+        pSmall += 100;
+        smallChecksDone++;
+      }
+
+      if (totalTrips >= tripsAccum + K) {
+        pSmall -= need;
+        pLarge -= need;
+        tripsAccum += K;
 
       if (totalTrips === tripsAccum) {
         // 正好完成本等级落地（如 9/9 落地或第 10 级某轮 10/10 落地）
@@ -3160,6 +3177,8 @@ function calcPlaneMaintenance(a) {
   for (let s = simStage; s < simStage + 120; s++) {
     const K = Math.min(s, 10);
     const need = K * maint;
+    const nextK = Math.min(s + 1, 10);
+    const nextNeed = nextK * maint;
 
     if (tripsToSmall === null && simSmall < need) {
       tripsToSmall = futureTrips;
@@ -3172,12 +3191,12 @@ function calcPlaneMaintenance(a) {
 
     if (tripsToSmall !== null && tripsToLarge !== null) break;
 
-    // 新逻辑：预测时同样遵循“检测到大修先补一次小修”
-    if (simLarge < need) {
-      simSmall += 100; // 联动先行补一次小修
-      simLarge += 400;
-    }
-    if (simSmall < need) {
+    // 常规补点
+    if (simSmall < need) simSmall += 100;
+    if (simLarge < need) simLarge += 400;
+
+    // 预测时同步执行提前小修规则
+    if ((simLarge - need) < nextNeed) {
       simSmall += 100;
     }
 
@@ -3214,8 +3233,9 @@ function calcPlaneMaintenance(a) {
 
 // 维保监控看板的专属排序状态
 // 维保监控看板排序状态
+let maintCurrentPage = 1;
 let maintSortCol = 'tripsToSmall'; 
-let maintSortAsc = true;          
+let maintSortAsc = true;        
 
 const MAINT_COLUMNS = [
   { id: 'seq', label: '#', sortable: false },
@@ -3243,9 +3263,55 @@ function handleMaintSort(colId) {
   renderMaintenance();
 }
 
+// 维保等级专属色阶映射（涵盖文字颜色、进度条渐变与发光特效）
+function getMaintLevelTheme(lvl) {
+  if (lvl >= 10) {
+    return {
+      text: '#f5c15c',
+      bg: 'linear-gradient(90deg, rgba(245,193,92,0.4), #f5c15c)',
+      shadow: '0 0 8px rgba(245,193,92,0.45)'
+    };
+  }
+  if (lvl === 9) {
+    return {
+      text: '#fb923c',
+      bg: 'linear-gradient(90deg, rgba(251,146,60,0.4), #fb923c)',
+      shadow: '0 0 6px rgba(251,146,60,0.35)'
+    };
+  }
+  if (lvl >= 7) {
+    return {
+      text: '#b8a1fb',
+      bg: 'linear-gradient(90deg, rgba(184,161,251,0.4), #8b5cf6)',
+      shadow: '0 0 6px rgba(184,161,251,0.3)'
+    };
+  }
+  if (lvl >= 5) {
+    return {
+      text: '#38bdf8',
+      bg: 'linear-gradient(90deg, rgba(56,189,248,0.4), #38bdf8)',
+      shadow: 'none'
+    };
+  }
+  if (lvl >= 3) {
+    return {
+      text: '#34d399',
+      bg: 'linear-gradient(90deg, rgba(52,211,153,0.4), #34d399)',
+      shadow: 'none'
+    };
+  }
+  return {
+    text: '#94a3b8',
+    bg: 'linear-gradient(90deg, rgba(148,163,184,0.4), #94a3b8)',
+    shadow: 'none'
+  };
+}
+
 function renderMaintenance() {
   const airportFilter = document.getElementById('mf-airport')?.value || '';
   const statusFilter = document.getElementById('mf-status')?.value || '';
+  const limitEl = document.getElementById('mf-limit'); // 👈 新增
+  const limit = limitEl ? (parseInt(limitEl.value) || 5) : 5; // 👈 新增：默认每页 5 条
 
   const list = fleet.map((a, originalIndex) => {
     const maintInfo = calcPlaneMaintenance(a);
@@ -3309,14 +3375,21 @@ function renderMaintenance() {
 
   const statGrid = document.getElementById('maint-stat-grid');
   if (statGrid) {
+    // 强制该容器在桌面端不换行，保持四联卡横向平铺展开
+    statGrid.style.flexWrap = 'nowrap';
+    statGrid.style.gap = '14px';
+
     statGrid.innerHTML = `
-      <div class="iba-stat-card" style="padding: 14px 16px 14px; min-width: 175px;">
-        <div class="iba-stat-title">急需检修飞机</div>
-        <div class="iba-stat-row">
-          <div class="iba-stat-val" style="color:var(--red);">${urgentCount} <span style="font-size:13px; color:var(--text3);">架</span></div>
-          <span class="iba-badge neg"><i class="fa-solid fa-triangle-exclamation"></i> ≤ 3趟内</span>
+      <!-- 1. 急需检修卡片 -->
+      <div class="iba-stat-card" style="padding: 14px 18px; flex: 1 1 220px; min-width: 220px; width: auto;">
+        <div class="iba-stat-title" style="white-space: nowrap;">急需检修飞机</div>
+        <div class="iba-stat-row" style="white-space: nowrap; gap: 8px;">
+          <div class="iba-stat-val" style="color:var(--red); white-space: nowrap; display: inline-flex; align-items: baseline; gap: 4px;">
+            ${urgentCount} <span style="font-size:13px; color:var(--text3);">架</span>
+          </div>
+          <span class="iba-badge neg" style="white-space: nowrap; flex-shrink: 0;"><i class="fa-solid fa-triangle-exclamation"></i> ≤ 3趟内</span>
         </div>
-        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono);">
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono); white-space: nowrap;">
           <span>占受控机队</span>
           <span style="color: var(--red); font-weight: 600;">${urgentPct}%</span>
         </div>
@@ -3325,13 +3398,16 @@ function renderMaintenance() {
         </div>
       </div>
 
-      <div class="iba-stat-card" style="padding: 14px 16px 14px; min-width: 175px;">
-        <div class="iba-stat-title">预警关注飞机</div>
-        <div class="iba-stat-row">
-          <div class="iba-stat-val" style="color:var(--amber);">${warningCount} <span style="font-size:13px; color:var(--text3);">架</span></div>
-          <span class="iba-badge neg" style="color:var(--amber); background:var(--amber-glow);"><i class="fa-solid fa-clock"></i> 4~8趟</span>
+      <!-- 2. 预警关注卡片 -->
+      <div class="iba-stat-card" style="padding: 14px 18px; flex: 1 1 220px; min-width: 220px; width: auto;">
+        <div class="iba-stat-title" style="white-space: nowrap;">预警关注飞机</div>
+        <div class="iba-stat-row" style="white-space: nowrap; gap: 8px;">
+          <div class="iba-stat-val" style="color:var(--amber); white-space: nowrap; display: inline-flex; align-items: baseline; gap: 4px;">
+            ${warningCount} <span style="font-size:13px; color:var(--text3);">架</span>
+          </div>
+          <span class="iba-badge neg" style="color:var(--amber); background:var(--amber-glow); white-space: nowrap; flex-shrink: 0;"><i class="fa-solid fa-clock"></i> 4~8趟</span>
         </div>
-        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono);">
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono); white-space: nowrap;">
           <span>占受控机队</span>
           <span style="color: var(--amber); font-weight: 600;">${warningPct}%</span>
         </div>
@@ -3340,32 +3416,36 @@ function renderMaintenance() {
         </div>
       </div>
 
-      <div class="iba-stat-card" style="padding: 14px 16px 14px; min-width: 200px;">
-        <div class="iba-stat-title">近期备用维保金</div>
-        <div class="iba-stat-row">
-          <div class="iba-stat-val" style="color:var(--cyan); font-size:22px;">
-            ${formatLargeNum(nextCheckTotalCost)} <span style="font-size:13px; color:var(--text3);">${W_ICON}</span>
+      <!-- 3. 近期备用维保金卡片（增加拉宽权重与防折行保护） -->
+      <div class="iba-stat-card" style="padding: 14px 18px; flex: 1.3 1 270px; min-width: 270px; width: auto;">
+        <div class="iba-stat-title" style="white-space: nowrap;">近期备用维保金</div>
+        <div class="iba-stat-row" style="white-space: nowrap; gap: 8px;">
+          <div class="iba-stat-val" style="color:var(--cyan); font-size:22px; white-space: nowrap; display: inline-flex; align-items: baseline; gap: 5px;">
+            ${formatLargeNum(nextCheckTotalCost)} <span style="font-size:13px; color:var(--text3); display: inline-flex; align-items: center;">${W_ICON}</span>
           </div>
-          <span class="iba-badge neu">3趟内预算</span>
+          <span class="iba-badge neu" style="white-space: nowrap; flex-shrink: 0;">3趟内预算</span>
         </div>
-        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono);">
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text3); font-family: var(--mono); white-space: nowrap; gap: 8px;">
           <span>历史累计已支出</span>
-          <span style="color: var(--text1); font-weight: 600;">${formatLargeNum(totalHistoricalSpent)} ${W_ICON}</span>
+          <span style="color: var(--text1); font-weight: 600; white-space: nowrap; display: inline-flex; align-items: baseline; gap: 4px;">${formatLargeNum(totalHistoricalSpent)} ${W_ICON}</span>
         </div>
         <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
           <div class="bar-fill cyan" style="width: 100%;"></div>
         </div>
       </div>
 
-      <div class="iba-stat-card" style="padding: 14px 16px 14px; min-width: 175px;">
-        <div class="iba-stat-title">当前受控机队</div>
-        <div class="iba-stat-row">
-          <div class="iba-stat-val">${filtered.length} <span style="font-size:13px; color:var(--text3);">架</span></div>
-          <span class="iba-badge ${isFiltered ? 'neu' : 'pos'}">
+      <!-- 4. 当前受控机队卡片 -->
+      <div class="iba-stat-card" style="padding: 14px 18px; flex: 1 1 220px; min-width: 220px; width: auto;">
+        <div class="iba-stat-title" style="white-space: nowrap;">当前受控机队</div>
+        <div class="iba-stat-row" style="white-space: nowrap; gap: 8px;">
+          <div class="iba-stat-val" style="white-space: nowrap; display: inline-flex; align-items: baseline; gap: 4px;">
+            ${filtered.length} <span style="font-size:13px; color:var(--text3);">架</span>
+          </div>
+          <span class="iba-badge ${isFiltered ? 'neu' : 'pos'}" style="white-space: nowrap; flex-shrink: 0;">
             <i class="fa-solid ${isFiltered ? 'fa-filter' : 'fa-check'}"></i> ${isFiltered ? '已筛选' : '全机队'}
           </span>
         </div>
-        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono);">
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono); white-space: nowrap;">
           <span>机队总编制</span>
           <span style="color: var(--text1); font-weight: 600;">${fleet.length} 架</span>
         </div>
@@ -3395,16 +3475,28 @@ function renderMaintenance() {
   if (countEl) countEl.textContent = `共 ${filtered.length} / ${fleet.length} 架飞机受控`;
 
   const tbody = document.getElementById('maint-tbody');
+  const paginationEl = document.getElementById('maint-pagination');
   if (!tbody) return;
 
   if (filtered.length === 0) {
     tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding:36px; color:var(--text3); font-size:13px;"><i class="fa-solid fa-inbox" style="font-size:24px; display:block; margin-bottom:8px;"></i>无匹配的飞机记录</td></tr>`;
+    if (paginationEl) paginationEl.style.display = 'none';
     return;
   }
 
-  tbody.innerHTML = filtered.map((item, idx) => {
+  // --- 分页切片计算 ---
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  if (maintCurrentPage > totalPages) maintCurrentPage = totalPages;
+  if (maintCurrentPage < 1) maintCurrentPage = 1;
+
+  const startIdx = (maintCurrentPage - 1) * limit;
+  const pagedList = filtered.slice(startIdx, startIdx + limit);
+
+  // 这里改用 pagedList 替代 filtered
+  tbody.innerHTML = pagedList.map((item, idx) => {
     const m = item.maintInfo;
-    const seqNum = idx + 1;
+    const seqNum = startIdx + idx + 1; // 序号跨页连续累计（如第2页第1个显示为 6）
 
     if (!m.valid) {
       return `<tr>
@@ -3464,15 +3556,20 @@ function renderMaintenance() {
           -${item.maint} <span style="font-size:10px; color:var(--text3);">点/趟</span>
         </td>
 
-        <!-- 当前等级进度 -->
+        <!-- 当前等级进度（动态色彩进阶） -->
         <td style="min-width: 125px;">
-          <div style="display:flex; justify-content:space-between; font-size:11px; font-family:var(--mono); margin-bottom:4px;">
-            <strong style="color:var(--cyan);">Lv.${m.level}</strong>
-            <span style="color:var(--text2);">${m.progress} / ${m.cap} (${pct}%)</span>
-          </div>
-          <div class="bar-track" style="height:5px;">
-            <div class="bar-fill cyan" style="width:${pct}%;"></div>
-          </div>
+          ${(() => {
+            const theme = getMaintLevelTheme(m.level);
+            return `
+              <div style="display:flex; justify-content:space-between; font-size:11px; font-family:var(--mono); margin-bottom:4px;">
+                <strong style="color:${theme.text}; text-shadow:${theme.shadow}; font-weight:700;">Lv.${m.level}</strong>
+                <span style="color:var(--text2);">${m.progress} / ${m.cap} (${pct}%)</span>
+              </div>
+              <div class="bar-track" style="height:5px;">
+                <div class="bar-fill" style="width:${pct}%; background:${theme.bg};"></div>
+              </div>
+            `;
+          })()}
         </td>
 
         <!-- 小维修点数 (含已小修次数) -->
@@ -3545,6 +3642,35 @@ function renderMaintenance() {
       </tr>
     `;
   }).join('');
+
+  if (paginationEl) {
+    paginationEl.style.display = 'flex';
+    document.getElementById('maint-page-info').textContent = `第 ${maintCurrentPage} 页 / 共 ${totalPages} 页`;
+    document.getElementById('btn-maint-prev').disabled = maintCurrentPage <= 1;
+    document.getElementById('btn-maint-next').disabled = maintCurrentPage >= totalPages;
+    const jumpInput = document.getElementById('maint-page-jump-input');
+    if (jumpInput) {
+      jumpInput.max = totalPages;
+      jumpInput.value = maintCurrentPage;
+    }
+  }
+}
+
+function changeMaintPage(delta) {
+  maintCurrentPage += delta;
+  renderMaintenance();
+}
+
+function jumpMaintPage() {
+  const input = document.getElementById('maint-page-jump-input');
+  if (!input) return;
+  const target = parseInt(input.value);
+  if (!isNaN(target) && target > 0) {
+    maintCurrentPage = target;
+    renderMaintenance();
+  } else {
+    toast('请输入有效的页码', true);
+  }
 }
 
 /**
@@ -4182,12 +4308,22 @@ try {
 
 // Column Settings
 const HEADERS = [
-  { id: 'seq', label: '序号' }, { id: 'reg', label: '注册号' }, { id: 'icao', label: '机型' }, { id: 'base', label: '基地' },
-  { id: 'size', label: '尺寸' }, { id: 'load', label: '类型' }, { id: 'dest', label: '目的地' },
-  { id: 'timeStr', label: '往返时长' }, { id: 'seats', label: '客舱配置', noSort: true }, { id: 'profit', label: '单趟利润' },
+  { id: 'seq', label: '序号' }, 
+  { id: 'reg', label: '注册号' }, 
+  { id: 'icao', label: '机型' }, 
+  { id: 'base', label: '基地' },
+  { id: 'size', label: '尺寸' }, 
+  { id: 'load', label: '类型' }, 
+  { id: 'contractLevel', label: '合同等级' },
+  { id: 'dest', label: '目的地' },
+  { id: 'timeStr', label: '往返时长' }, 
+  { id: 'seats', label: '客舱配置', noSort: true }, 
+  { id: 'profit', label: '单趟利润' },
   { id: 'profitHr', label: '时薪 (W/h)' }, 
   { id: 'profitCrew', label: '每地勤收益' },
-  { id: 'roiProgress', label: '回本进度' }, { id: 'rating', label: '评级' }, { id: 'vsAvg', label: '同级表现', noSort: true }
+  { id: 'roiProgress', label: '回本进度' }, 
+  { id: 'rating', label: '评级' }, 
+  { id: 'vsAvg', label: '同级表现', noSort: true }
 ];
 const DEFAULT_COLS = HEADERS.map(h => h.id);
 let visibleColumns = [];
@@ -4241,6 +4377,14 @@ function ensureProfitCrewAfterHourly() {
     }
 }
 ensureProfitCrewAfterHourly();
+if (Array.isArray(visibleColumns) && !visibleColumns.includes('contractLevel')) {
+  visibleColumns.splice(visibleColumns.indexOf('timeStr') + 1, 0, 'contractLevel');
+  localStorage.setItem('woa_visible_cols', JSON.stringify(visibleColumns));
+}
+if (Array.isArray(columnOrder) && !columnOrder.includes('contractLevel')) {
+  columnOrder.splice(columnOrder.indexOf('timeStr') + 1, 0, 'contractLevel');
+  localStorage.setItem('woa_col_order', JSON.stringify(columnOrder));
+}
 
 // ==========================================
 // WOA Command Center - 智能 OCR 多图录入引擎 (最终修复版)
@@ -9004,6 +9148,22 @@ const COL_RENDERERS = {
                 </div>`;
     },
     timeStr: (a) => `<span style="font-family:var(--mono);font-size:12px;color:var(--text2)">${a.timeStr}</span>`,
+    contractLevel: (a) => {
+      const maintInfo = (typeof calcPlaneMaintenance === 'function') 
+        ? calcPlaneMaintenance(a) 
+        : { valid: false, level: 1, progress: 0, cap: 1 };
+
+      if (!maintInfo.valid) {
+        return `<span style="color:var(--text3); font-family:var(--mono);">—</span>`;
+      }
+
+      const theme = getMaintLevelTheme(maintInfo.level);
+
+      return `<div style="display:inline-flex; align-items:baseline; gap:4px; padding:2px 6px; border-radius:4px; background:var(--bg-input); border:1px solid var(--border); font-family:var(--mono); white-space:nowrap;" title="合同等级：Lv.${maintInfo.level} (${maintInfo.progress}/${maintInfo.cap})">
+        <strong style="color:${theme.text}; text-shadow:${theme.shadow}; font-size:11.5px; font-weight:700;">Lv.${maintInfo.level}</strong>
+        <span style="font-size:10px; color:var(--text3);">${maintInfo.progress}/${maintInfo.cap}</span>
+      </div>`;
+    },
     seats: (a) => `<span style="font-size:12px;color:var(--text2)">${seatLabel(a)}</span>`,
     profit: (a) => `<span style="font-size:12px;font-weight:600;font-family:var(--mono);color:${a.acProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${a.acProfit !== 0 ? fmt(Math.round(a.acProfit)) + ' ' + W_ICON : '—'}</span>`,
     profitHr: (a) => `<span style="font-size:12px;font-weight:600;font-family:var(--mono);color:var(--cyan)">${a.profitHr !== 0 ? fmt(Math.round(a.profitHr)) + ' ' + W_ICON : '—'}</span>`,
