@@ -3084,8 +3084,22 @@ function calcPlaneMaintenance(a) {
     const need = K * maint;
 
     // 进入该等级执行飞行前，必须确保具备该等级的点数门槛
-    if (pSmall < need + maint * 1) { pSmall += 100; smallChecksDone++; }
-    if (pLarge < need) { pLarge += 400; largeChecksDone++; }
+    // 新逻辑：只要检测到进行下一轮需要大修，先进行一次小修
+    if (pLarge < need) {
+      // 1. 先行进行一次小修
+      pSmall += 100;
+      smallChecksDone++;
+      
+      // 2. 进行大修
+      pLarge += 400;
+      largeChecksDone++;
+    }
+
+    // 3. 后续若小修点数仍不够（或无大修但小修耗尽时），再正常补充小修
+    if (pSmall < need) {
+      pSmall += 100;
+      smallChecksDone++;
+    }
 
     if (totalTrips >= tripsAccum + K) {
       // 这 K 趟已经全部飞完，完整扣除本等级点数消耗
@@ -3158,8 +3172,14 @@ function calcPlaneMaintenance(a) {
 
     if (tripsToSmall !== null && tripsToLarge !== null) break;
 
-    if (simSmall < need) simSmall += 100;
-    if (simLarge < need) simLarge += 400;
+    // 新逻辑：预测时同样遵循“检测到大修先补一次小修”
+    if (simLarge < need) {
+      simSmall += 100; // 联动先行补一次小修
+      simLarge += 400;
+    }
+    if (simSmall < need) {
+      simSmall += 100;
+    }
 
     simSmall -= need;
     simLarge -= need;
