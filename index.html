@@ -2850,6 +2850,78 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
   </div>
 </div>
 
+<!-- 1. 近期备用维保金 构成明细弹窗（优化内边距与呼吸感） -->
+<div class="popup-overlay" id="maint-budget-modal" onclick="if(event.target===this) closeMaintBudgetModal()">
+  <div class="popup-box" style="max-width: 840px;">
+    <button class="popup-close-float" onclick="closeMaintBudgetModal()"><i class="fa-solid fa-xmark"></i></button>
+    
+    <!-- 头部：内边距放大，标题与副标题之间留出 10px 间距 -->
+    <div class="popup-header" style="padding: 24px 32px 18px 32px;">
+      <div>
+        <div class="popup-title" style="display:flex; align-items:center; gap:12px; margin-bottom: 10px;">
+          <i class="fa-solid fa-coins" style="color:var(--cyan)"></i> 近期备用维保金明细
+        </div>
+        <div class="popup-subtitle" id="mb-modal-subtitle" style="font-size:12.5px; line-height: 1.6;"></div>
+      </div>
+    </div>
+    
+    <!-- 内容区：顶部与底部拉开距离，卡片与表格之间留出 20px 间距 -->
+    <div class="popup-body" style="display:block; padding: 18px 32px 28px 32px;">
+      <!-- 汇总小卡片 -->
+      <div id="mb-modal-summary-chips" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom: 20px;"></div>
+      
+      <!-- 费用明细表格 -->
+      <div class="table-wrap" style="max-height: 55vh; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px; text-align:center;">#</th>
+              <th>飞机</th>
+              <th>基地</th>
+              <th>检修项目</th>
+              <th>节点预测</th>
+              <th>紧迫度</th>
+              <th style="text-align:right;">预估费用</th>
+            </tr>
+          </thead>
+          <tbody id="mb-modal-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. 历史维保累计支出 明细弹窗 -->
+<div class="popup-overlay" id="maint-history-modal" onclick="if(event.target===this) closeMaintHistoryModal()">
+  <div class="popup-box" style="max-width: 840px;">
+    <button class="popup-close-float" onclick="closeMaintHistoryModal()"><i class="fa-solid fa-xmark"></i></button>
+    
+    <!-- 1. 头部内边距拉宽，标题和副标题间距设为 10px -->
+    <div class="popup-header" style="padding: 24px 32px 18px 32px;">
+      <div>
+        <div class="popup-title" style="display:flex; align-items:center; gap:12px; margin-bottom: 10px;">
+          <i class="fa-solid fa-clock-rotate-left" style="color:var(--purple)"></i> 历史维保累计支出明细
+        </div>
+        <div class="popup-subtitle" id="mh-modal-subtitle" style="font-size:12.5px; line-height: 1.6;"></div>
+      </div>
+    </div>
+    
+    <!-- 2. 内容区增加顶部间距 (padding-top: 18px)，胶囊卡片间距拉大到 14px，底部间距增加到 20px -->
+    <div class="popup-body" style="display:block; padding: 18px 32px 28px 32px;">
+      <!-- 汇总小卡片 -->
+      <div id="mh-modal-summary-chips" style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom: 20px;"></div>
+      
+      <!-- 支出明细表格 -->
+      <div class="table-wrap" style="max-height: 55vh; overflow-y: auto;">
+        <table>
+          <thead id="mh-modal-thead"></thead>
+          <tbody id="mh-modal-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="popup-overlay" id="dup-reg-modal" onclick="if(event.target===this) cancelDupSave()">
   <div class="popup-box" style="max-width: 440px;">
     <button class="popup-close-float" onclick="cancelDupSave()"><i class="fa-solid fa-xmark"></i></button>
@@ -3310,11 +3382,394 @@ function calcPlaneMaintenance(a) {
   };
 }
 
+/**
+ * 格式化检修阶段节点文案
+ * 普通等级：Lv6升Lv7
+ * 满级续约：Lv10续Lv10
+ */
+function formatMaintStage(targetLv) {
+  if (!targetLv) return '—';
+  if (targetLv >= 10) {
+    return 'Lv10续Lv10'; // 也可以写成 'Lv.10续Lv.10' 或 'Lv.10 续 Lv.10'
+  }
+  if (targetLv <= 1) {
+    return 'Lv1';
+  }
+  return `Lv${targetLv - 1}升Lv${targetLv}`; // 也可以写成 `Lv.${targetLv - 1}升Lv.${targetLv}`
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 维保备用金 & 历史支出 弹窗明细逻辑
+// ═══════════════════════════════════════════════════════════════
+
+// 1. 打开近期备用金明细弹窗
+function openMaintBudgetDetailModal() {
+  const airportFilter = document.getElementById('mf-airport')?.value || '';
+  const statusFilter = document.getElementById('mf-status')?.value || '';
+
+  const list = fleet.map((a, originalIndex) => ({
+    ...a,
+    maintInfo: calcPlaneMaintenance(a),
+    originalIndex
+  })).filter(item => {
+    if (airportFilter && item.base !== airportFilter) return false;
+    if (statusFilter && item.maintInfo.status !== statusFilter) return false;
+    return true;
+  });
+
+  const tripLabel = maintBudgetTrips === 0 ? '即刻进厂' : `${maintBudgetTrips}趟内`;
+  const typeLabel = maintBudgetType === 'small' ? '仅小修 (A检)' : maintBudgetType === 'large' ? '仅大修 (C/D检)' : '全部大小修';
+
+  // 提取符合当前趟数和类型条件的检修项
+  const items = [];
+  let sumSmall = 0, countSmall = 0;
+  let sumLarge = 0, countLarge = 0;
+
+  list.forEach(ac => {
+    const m = ac.maintInfo;
+    if (!m.valid) return;
+
+    // 小修需求
+    if (maintBudgetType !== 'large' && m.tripsToSmall <= maintBudgetTrips) {
+      items.push({
+        id: ac.id,
+        reg: ac.reg,
+        icao: ac.icao,
+        base: ac.base,
+        dest: ac.dest,
+        checkType: 'small',
+        typeName: '小修 (A检)',
+        cost: m.smallCost,
+        tripsLeft: m.tripsToSmall,
+        targetLv: m.smallTargetLv
+      });
+      sumSmall += m.smallCost;
+      countSmall++;
+    }
+
+    // 大修需求
+    if (maintBudgetType !== 'small' && m.tripsToLarge <= maintBudgetTrips) {
+      items.push({
+        id: ac.id,
+        reg: ac.reg,
+        icao: ac.icao,
+        base: ac.base,
+        dest: ac.dest,
+        checkType: 'large',
+        typeName: '大修 (C/D检)',
+        cost: m.largeCost,
+        tripsLeft: m.tripsToLarge,
+        targetLv: m.largeTargetLv
+      });
+      sumLarge += m.largeCost;
+      countLarge++;
+    }
+  });
+
+  // 按紧迫度排序：剩余趟数越少排越前，相同时大修排前面
+  items.sort((a, b) => a.tripsLeft - b.tripsLeft || (b.checkType === 'large' ? 1 : -1));
+
+  const totalCost = sumSmall + sumLarge;
+  // 1. 副标题行：使用带间距的点号分隔，排版更舒展
+  document.getElementById('mb-modal-subtitle').innerHTML = 
+    `统计口径：<strong style="color:var(--text1)">${typeLabel}</strong> <span style="color:var(--text3); margin:0 4px;">·</span> <strong style="color:var(--text1)">${tripLabel}</strong>${airportFilter ? ` <span style="color:var(--text3); margin:0 4px;">·</span> 驻扎在 <strong>${airportFilter}</strong>` : ''} <span style="color:var(--text3); margin:0 4px;">·</span> 共计 <strong>${items.length}</strong> 项需求`;
+
+  // 2. 顶部汇总胶囊：放大 padding (6px 14px)，圆角与边距增大
+  document.getElementById('mb-modal-summary-chips').innerHTML = `
+    <span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px;">总需储备: <b style="color:var(--text1); font-size:14px; margin-left:6px;">${formatLargeNum(totalCost)}</b> ${W_ICON}</span>
+    ${maintBudgetType !== 'large' ? `<span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px; border-color:rgba(139,92,246,0.35); background:rgba(139,92,246,0.06);">小修(A检): <b style="color:var(--cyan); margin-left:6px;">${countSmall} 项 · ${formatLargeNum(sumSmall)}</b>${W_ICON}</span>` : ''}
+    ${maintBudgetType !== 'small' ? `<span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px; border-color:rgba(184,161,251,0.35); background:rgba(184,161,251,0.06);">大修(C/D检): <b style="color:var(--purple); margin-left:6px;">${countLarge} 项 · ${formatLargeNum(sumLarge)}</b>${W_ICON}</span>` : ''}
+  `;
+
+  const tbody = document.getElementById('mb-modal-tbody');
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--text3);"><i class="fa-solid fa-circle-check" style="color:var(--green); font-size:22px; display:block; margin-bottom:6px;"></i>当前口径下暂无近期进厂费用支出需求</td></tr>`;
+  } else {
+    tbody.innerHTML = items.map((it, idx) => `
+      <tr>
+        <td style="text-align:center; font-family:var(--mono); color:var(--text3);">${idx + 1}</td>
+        <td>
+          <span class="reg-badge" style="cursor:pointer;" onclick="openPopup('${it.id}')">${it.reg}</span>
+          <span style="font-family:var(--mono); font-weight:600; margin-left:6px; color:var(--text2);">${it.icao}</span>
+        </td>
+        <td>
+          <span class="hub-tag hub-focus" style="cursor:pointer; font-size:10px;" onclick="openAirportInfo('${it.base}')">${it.base}</span>
+        </td>
+        <td>
+          <span class="diff-badge" style="${it.checkType === 'small' ? 'background:var(--cyan-glow); color:var(--cyan); border:1px solid rgba(139,92,246,0.3);' : 'background:var(--purple-glow); color:var(--purple); border:1px solid rgba(184,161,251,0.3);'}">
+            <i class="fa-solid ${it.checkType === 'small' ? 'fa-wrench' : 'fa-shield-heart'}"></i> ${it.typeName}
+          </span>
+        </td>
+        <td style="font-family:var(--mono); font-size:11.5px; color:var(--text2);">
+          ${formatMaintStage(it.targetLv)}
+        </td>
+        <td style="font-family:var(--mono); font-size:12px; font-weight:700;">
+          ${it.tripsLeft === 0 ? '<span style="color:var(--red);"><i class="fa-solid fa-triangle-exclamation"></i> 即刻进厂</span>' : `<span style="color:${it.tripsLeft <= 3 ? 'var(--amber)' : 'var(--text1)'};">剩 ${it.tripsLeft} 趟</span>`}
+        </td>
+        <td style="text-align:right; font-family:var(--mono); font-weight:700; font-size:13px; color:var(--text1);">
+          ${formatLargeNum(it.cost)} <span style="font-size:11px;">${W_ICON}</span>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('maint-budget-modal').classList.add('show');
+}
+
+function closeMaintBudgetModal() {
+  document.getElementById('maint-budget-modal').classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 历史维保累计支出：机型汇总 ➔ 单机明细 双层下钻引擎
+// ═══════════════════════════════════════════════════════════════
+
+let mhCurrentModel = null; // 当前下钻的机型（null 表示一级机型汇总）
+
+// 1. 打开弹窗：默认进入一级机型汇总
+function openMaintHistoryDetailModal() {
+  mhCurrentModel = null;
+  renderMaintHistoryModal();
+  document.getElementById('maint-history-modal').classList.add('show');
+}
+
+// 2. 选择机型下钻 / 点击返回切换
+function selectMaintHistoryModel(icao) {
+  // 👇 新增：强制清理残留的全局气泡
+  const tip = document.getElementById('woa-custom-tooltip');
+  if (tip) tip.classList.remove('show');
+
+  mhCurrentModel = icao;
+  renderMaintHistoryModal();
+}
+
+// 3. 关闭弹窗
+function closeMaintHistoryModal() {
+  // 👇 新增：强制清理残留的全局气泡
+  const tip = document.getElementById('woa-custom-tooltip');
+  if (tip) tip.classList.remove('show');
+
+  document.getElementById('maint-history-modal').classList.remove('show');
+}
+
+// 4. 核心渲染函数（双层动态切换）
+function renderMaintHistoryModal() {
+  const airportFilter = document.getElementById('mf-airport')?.value || '';
+
+  // 筛选出所有产生过检修支出的受控飞机
+  const list = fleet.map(a => ({
+    ...a,
+    maintInfo: calcPlaneMaintenance(a)
+  })).filter(item => {
+    if (airportFilter && item.base !== airportFilter) return false;
+    return item.maintInfo.valid && item.maintInfo.totalSpentDone > 0;
+  });
+
+  // 全机队总计
+  let grandTotal = 0;
+  let totalSmallChecks = 0;
+  let totalSmallCost = 0;
+  let totalLargeChecks = 0;
+  let totalLargeCost = 0;
+
+  // 按机型聚合
+  const modelMap = {};
+  list.forEach(ac => {
+    const m = ac.maintInfo;
+    const icao = ac.icao || '未知机型';
+    grandTotal += m.totalSpentDone;
+    totalSmallChecks += m.smallChecksDone;
+    totalSmallCost += (m.smallChecksDone * m.smallCost);
+    totalLargeChecks += m.largeChecksDone;
+    totalLargeCost += (m.largeChecksDone * m.largeCost);
+
+    if (!modelMap[icao]) {
+      modelMap[icao] = {
+        icao,
+        planeCount: 0,
+        smallChecks: 0,
+        smallCost: 0,
+        largeChecks: 0,
+        largeCost: 0,
+        totalSpent: 0,
+        planes: []
+      };
+    }
+    modelMap[icao].planeCount++;
+    modelMap[icao].smallChecks += m.smallChecksDone;
+    modelMap[icao].smallCost += (m.smallChecksDone * m.smallCost);
+    modelMap[icao].largeChecks += m.largeChecksDone;
+    modelMap[icao].largeCost += (m.largeChecksDone * m.largeCost);
+    modelMap[icao].totalSpent += m.totalSpentDone;
+    modelMap[icao].planes.push(ac);
+  });
+
+  const modelList = Object.values(modelMap).sort((a, b) => b.totalSpent - a.totalSpent);
+
+  const subtitleEl = document.getElementById('mh-modal-subtitle');
+  const chipsEl = document.getElementById('mh-modal-summary-chips');
+  const theadEl = document.getElementById('mh-modal-thead');
+  const tbodyEl = document.getElementById('mh-modal-tbody');
+
+  if (!mhCurrentModel) {
+    // ──────────────────────────────────────────
+    // 一级界面：机型汇总列表
+    // ──────────────────────────────────────────
+    subtitleEl.innerHTML = `共 <strong>${modelList.length}</strong> 个机型（${list.length} 架飞机）产生过检修费用${airportFilter ? ` · 驻扎在 <strong>${airportFilter}</strong>` : ''} · 点击机型查看各飞机明细`;
+
+    chipsEl.innerHTML = `
+      <span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px;">历史总支出: <b style="color:var(--text1); font-size:14px; margin-left:6px;">${formatLargeNum(grandTotal)}</b> ${W_ICON}</span>
+      <span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px; border-color:rgba(139,92,246,0.35); background:rgba(139,92,246,0.06);">已完成小修: <b style="color:var(--cyan); margin-left:6px;">${totalSmallChecks} 次 · 共 ${formatLargeNum(totalSmallCost)}</b> ${W_ICON}</span>
+      <span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px; border-color:rgba(184,161,251,0.35); background:rgba(184,161,251,0.06);">已完成大修: <b style="color:var(--purple); margin-left:6px;">${totalLargeChecks} 次 · 共 ${formatLargeNum(totalLargeCost)}</b> ${W_ICON}</span>
+    `;
+
+    theadEl.innerHTML = `
+      <tr>
+        <th style="width:40px; text-align:center;">#</th>
+        <th>机型</th>
+        <th>检修飞机数</th>
+        <th>小修(A检)支出总额</th>
+        <th>大修(C/D检)支出总额</th>
+        <th style="text-align:right;">机型累计支出</th>
+        <th style="width:60px; text-align:center;">明细</th>
+      </tr>
+    `;
+
+    if (modelList.length === 0) {
+      tbodyEl.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--text3);"><i class="fa-solid fa-inbox" style="font-size:22px; display:block; margin-bottom:6px;"></i>暂无历史维保支出记录</td></tr>`;
+    } else {
+      tbodyEl.innerHTML = modelList.map((m, idx) => `
+        <!-- 👇 去掉了 title 属性，彻底杜绝悬浮窗残留 👇 -->
+        <tr onclick="selectMaintHistoryModel('${m.icao}')" style="cursor:pointer; transition: background 0.15s;" onmouseover="this.style.background='var(--bg-hover)';" onmouseout="this.style.background='';">
+          <td style="text-align:center; font-family:var(--mono); color:var(--text3);">${idx + 1}</td>
+          <td>
+            <span style="font-family:var(--mono); font-weight:700; font-size:14px; color:var(--text1);">${m.icao}</span>
+          </td>
+          <td>
+            <span class="diff-badge diff-neu" style="font-size:11px;">
+              <i class="fa-solid fa-plane"></i> ${m.planeCount} 架
+            </span>
+          </td>
+          <td>
+            <div style="font-family:var(--mono); font-size:12px; color:var(--cyan); font-weight:600;">
+              ${m.smallChecks} 次
+              <span style="color:var(--text3); font-weight:normal; font-size:11px;">(${formatLargeNum(m.smallCost)} ${W_ICON})</span>
+            </div>
+          </td>
+          <td>
+            <div style="font-family:var(--mono); font-size:12px; color:var(--purple); font-weight:600;">
+              ${m.largeChecks} 次
+              <span style="color:var(--text3); font-weight:normal; font-size:11px;">(${formatLargeNum(m.largeCost)} ${W_ICON})</span>
+            </div>
+          </td>
+          <td style="text-align:right; font-family:var(--mono); font-weight:700; font-size:13.5px; color:var(--text1);">
+            ${formatLargeNum(m.totalSpent)} <span style="font-size:11px;">${W_ICON}</span>
+          </td>
+          <td style="text-align:center; color:var(--cyan); font-size:12px;">
+            <span style="padding:2px 7px; border-radius:4px; background:var(--cyan-glow);"><i class="fa-solid fa-chevron-right"></i></span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+  } else {
+    // ──────────────────────────────────────────
+    // 二级界面：指定机型下的详细飞机列表（拉宽间距）
+    // ──────────────────────────────────────────
+    const targetModel = modelMap[mhCurrentModel] || { planeCount: 0, planes: [], totalSpent: 0, smallChecks: 0, smallCost: 0, largeChecks: 0, largeCost: 0 };
+    const planes = targetModel.planes.sort((a, b) => b.maintInfo.totalSpentDone - a.maintInfo.totalSpentDone);
+
+    // 1. 返回按钮与文字间距设为 gap: 16px，文字项目之间以独立 span 隔开
+    subtitleEl.innerHTML = `
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" onclick="selectMaintHistoryModel(null)" style="padding:4px 12px; font-size:11.5px; height:28px; border-radius:14px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; background:var(--bg-input); border:1px solid var(--border-lit);">
+          <i class="fa-solid fa-arrow-left"></i> 返回机型列表
+        </button>
+        <span style="display:inline-flex; align-items:center; gap:10px;">
+          <span>机型 <strong style="color:var(--text1); font-size:13.5px; font-family:var(--mono);">${mhCurrentModel}</strong></span>
+          <span style="color:var(--text3);">·</span>
+          <span>共 <strong style="color:var(--text1); font-family:var(--mono);">${planes.length}</strong> 架受控飞机</span>
+          <span style="color:var(--text3);">·</span>
+          <span>累计已支出 <strong style="color:var(--text1); font-family:var(--mono);">${formatLargeNum(targetModel.totalSpent)}</strong> ${W_ICON}</span>
+        </span>
+      </div>
+    `;
+
+    // 2. 胶囊卡片内边距设为 padding: 6px 14px，间距设为 gap: 14px
+    chipsEl.innerHTML = `
+      <span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px;">${mhCurrentModel} 总支出: <b style="color:var(--text1); font-size:14px; margin-left:6px;">${formatLargeNum(targetModel.totalSpent)}</b> ${W_ICON}</span>
+      <span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px; border-color:rgba(139,92,246,0.35); background:rgba(139,92,246,0.06);">小修(A检): <b style="color:var(--cyan); margin-left:6px;">${targetModel.smallChecks} 次 · 共 ${formatLargeNum(targetModel.smallCost)}</b> ${W_ICON}</span>
+      <span class="ced-chip" style="font-size:12px; padding:6px 14px; border-radius:10px; border-color:rgba(184,161,251,0.35); background:rgba(184,161,251,0.06);">大修(C/D检): <b style="color:var(--purple); margin-left:6px;">${targetModel.largeChecks} 次 · 共 ${formatLargeNum(targetModel.largeCost)}</b> ${W_ICON}</span>
+    `;
+
+    theadEl.innerHTML = `
+      <tr>
+        <th style="width:40px; text-align:center;">#</th>
+        <th>飞机注册号</th>
+        <th>驻扎基地</th>
+        <th>小修(A检)支出</th>
+        <th>大修(C/D检)支出</th>
+        <th style="text-align:right;">单机累计已支出</th>
+      </tr>
+    `;
+
+    tbodyEl.innerHTML = planes.map((ac, idx) => {
+      const m = ac.maintInfo;
+      const smallSubtotal = m.smallChecksDone * m.smallCost;
+      const largeSubtotal = m.largeChecksDone * m.largeCost;
+      return `
+        <tr>
+          <td style="text-align:center; font-family:var(--mono); color:var(--text3);">${idx + 1}</td>
+          <td>
+            <span class="reg-badge" style="cursor:pointer;" onclick="openPopup('${ac.id}')">${ac.reg}</span>
+            <span style="font-family:var(--mono); font-weight:600; margin-left:6px; color:var(--text2);">${ac.icao}</span>
+          </td>
+          <td>
+            <span class="hub-tag hub-focus" style="cursor:pointer; font-size:10px;" onclick="openAirportInfo('${ac.base}')">${ac.base}</span>
+          </td>
+          <td>
+            <div style="font-family:var(--mono); font-size:12px; color:var(--cyan); font-weight:600;">
+              ${m.smallChecksDone} 次
+              <span style="color:var(--text3); font-weight:normal; font-size:11px;">(${formatLargeNum(smallSubtotal)} ${W_ICON})</span>
+            </div>
+            <div style="font-size:10px; color:var(--text3); font-family:var(--mono);">单次: ${formatLargeNum(m.smallCost)}</div>
+          </td>
+          <td>
+            <div style="font-family:var(--mono); font-size:12px; color:var(--purple); font-weight:600;">
+              ${m.largeChecksDone} 次
+              <span style="color:var(--text3); font-weight:normal; font-size:11px;">(${formatLargeNum(largeSubtotal)} ${W_ICON})</span>
+            </div>
+            <div style="font-size:10px; color:var(--text3); font-family:var(--mono);">单次: ${formatLargeNum(m.largeCost)}</div>
+          </td>
+          <td style="text-align:right; font-family:var(--mono); font-weight:700; font-size:13.5px; color:var(--text1);">
+            ${formatLargeNum(m.totalSpentDone)} <span style="font-size:11px;">${W_ICON}</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+}
+
 // 维保监控看板的专属排序状态
 // 维保监控看板排序状态
 let maintCurrentPage = 1;
 let maintSortCol = 'tripsToSmall'; 
-let maintSortAsc = true;        
+let maintSortAsc = true;   
+
+// 维保备用金预测配置：趟数 + 检修类型
+let maintBudgetTrips = 3;
+let maintBudgetType = 'all'; // 'all' (总和) | 'small' (小修) | 'large' (大修)
+
+window.setMaintBudgetTrips = function(val) {
+    maintBudgetTrips = parseInt(val);
+    renderMaintenance();
+};
+
+// 👇 新增：切换小修 / 大修 / 总和
+window.setMaintBudgetType = function(val) {
+    maintBudgetType = val;
+    renderMaintenance();
+};
 
 const MAINT_COLUMNS = [
   { id: 'seq', label: '#', sortable: false },
@@ -3434,7 +3889,8 @@ function renderMaintenance() {
   // 统计顶部指标（包含历史已支出维保金总额）
   let urgentCount = 0;
   let warningCount = 0;
-  let nextCheckTotalCost = 0;
+  let nextSmallCost = 0;  // 👈 分别统计小修备用金
+  let nextLargeCost = 0;  // 👈 分别统计大修备用金
   let totalHistoricalSpent = 0;
 
   filtered.forEach(item => {
@@ -3442,10 +3898,28 @@ function renderMaintenance() {
     if (!m.valid) return;
     if (m.status === 'urgent') urgentCount++;
     if (m.status === 'warning') warningCount++;
-    if (m.tripsToSmall <= 3) nextCheckTotalCost += m.smallCost;
-    if (m.tripsToLarge <= 3) nextCheckTotalCost += m.largeCost;
+    
+    // 分别根据预测趟数统计
+    if (m.tripsToSmall <= maintBudgetTrips) nextSmallCost += m.smallCost;
+    if (m.tripsToLarge <= maintBudgetTrips) nextLargeCost += m.largeCost;
+    
     totalHistoricalSpent += m.totalSpentDone;
   });
+
+  // 👇 根据用户选择的类型（全部/小修/大修）确定最终显示金额与主题色
+  let nextCheckTotalCost = nextSmallCost + nextLargeCost;
+  let valColor = 'var(--cyan)';
+  let barGradient = 'linear-gradient(90deg, var(--cyan), var(--purple))';
+
+  if (maintBudgetType === 'small') {
+    nextCheckTotalCost = nextSmallCost;
+    valColor = 'var(--cyan)';
+    barGradient = 'var(--cyan)';
+  } else if (maintBudgetType === 'large') {
+    nextCheckTotalCost = nextLargeCost;
+    valColor = 'var(--purple)';
+    barGradient = 'var(--purple)';
+  }
 
   const totalFiltered = filtered.length || 1;
   const urgentPct = Math.round((urgentCount / totalFiltered) * 100);
@@ -3454,7 +3928,6 @@ function renderMaintenance() {
 
   const statGrid = document.getElementById('maint-stat-grid');
   if (statGrid) {
-    // 强制该容器在桌面端不换行，保持四联卡横向平铺展开
     statGrid.style.flexWrap = 'nowrap';
     statGrid.style.gap = '14px';
 
@@ -3472,8 +3945,8 @@ function renderMaintenance() {
           <span>占受控机队</span>
           <span style="color: var(--red); font-weight: 600;">${urgentPct}%</span>
         </div>
-        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
-          <div class="bar-fill" style="width: ${urgentPct}%; background: var(--red); box-shadow: 0 0 6px var(--red-glow);"></div>
+        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input); flex: none;">
+          <div class="bar-fill" style="width: ${urgentPct}%; height: 100%; background: var(--red); box-shadow: 0 0 6px var(--red-glow);"></div>
         </div>
       </div>
 
@@ -3490,26 +3963,62 @@ function renderMaintenance() {
           <span>占受控机队</span>
           <span style="color: var(--amber); font-weight: 600;">${warningPct}%</span>
         </div>
-        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
-          <div class="bar-fill" style="width: ${warningPct}%; background: var(--amber); box-shadow: 0 0 6px var(--amber-glow);"></div>
+        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input); flex: none;">
+          <div class="bar-fill" style="width: ${warningPct}%; height: 100%; background: var(--amber); box-shadow: 0 0 6px var(--amber-glow);"></div>
         </div>
       </div>
 
-      <!-- 3. 近期备用维保金卡片（增加拉宽权重与防折行保护） -->
-      <div class="iba-stat-card" style="padding: 14px 18px; flex: 1.3 1 270px; min-width: 270px; width: auto;">
-        <div class="iba-stat-title" style="white-space: nowrap;">近期备用维保金</div>
-        <div class="iba-stat-row" style="white-space: nowrap; gap: 8px;">
-          <div class="iba-stat-val" style="color:var(--cyan); font-size:22px; white-space: nowrap; display: inline-flex; align-items: baseline; gap: 5px;">
+      <!-- 3. 近期备用维保金卡片 -->
+      <div class="iba-stat-card" style="padding: 14px 18px; flex: 1.4 1 310px; min-width: 310px; width: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; position: relative; z-index: 2;">
+          <div class="iba-stat-title" style="margin-bottom: 0; white-space: nowrap;">近期备用维保金</div>
+          
+          <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+            <div style="position:relative;">
+              <select class="iba-badge neu" onchange="setMaintBudgetType(this.value)" style="cursor:pointer; appearance:none; -webkit-appearance:none; padding:2px 18px 2px 7px; font-size:10px; border:1px solid var(--border); outline:none; background:var(--bg-input); font-family:var(--mono); color:${valColor}; font-weight:600; transition:all 0.2s;">
+                <option value="all" style="color:var(--text1); background:var(--bg-deep);" ${maintBudgetType === 'all' ? 'selected' : ''}>全部 (大小修)</option>
+                <option value="small" style="color:var(--cyan); background:var(--bg-deep);" ${maintBudgetType === 'small' ? 'selected' : ''}>仅小修 (A检)</option>
+                <option value="large" style="color:var(--purple); background:var(--bg-deep);" ${maintBudgetType === 'large' ? 'selected' : ''}>仅大修 (C/D检)</option>
+              </select>
+              <i class="fa-solid fa-chevron-down" style="position:absolute; right:5px; top:50%; transform:translateY(-50%); font-size:7px; color:var(--text3); pointer-events:none;"></i>
+            </div>
+
+            <div style="position:relative;">
+              <select class="iba-badge neu" onchange="setMaintBudgetTrips(this.value)" style="cursor:pointer; appearance:none; -webkit-appearance:none; padding:2px 18px 2px 7px; font-size:10px; border:1px solid var(--border); outline:none; background:var(--bg-input); font-family:var(--mono); color:var(--text3); font-weight:600; transition:all 0.2s;">
+                <option value="0" style="color:var(--text1); background:var(--bg-deep);" ${maintBudgetTrips === 0 ? 'selected' : ''}>即刻进厂</option>
+                <option value="1" style="color:var(--text1); background:var(--bg-deep);" ${maintBudgetTrips === 1 ? 'selected' : ''}>1趟内</option>
+                <option value="3" style="color:var(--text1); background:var(--bg-deep);" ${maintBudgetTrips === 3 ? 'selected' : ''}>3趟内</option>
+                <option value="5" style="color:var(--text1); background:var(--bg-deep);" ${maintBudgetTrips === 5 ? 'selected' : ''}>5趟内</option>
+                <option value="10" style="color:var(--text1); background:var(--bg-deep);" ${maintBudgetTrips === 10 ? 'selected' : ''}>10趟内</option>
+              </select>
+              <i class="fa-solid fa-chevron-down" style="position:absolute; right:5px; top:50%; transform:translateY(-50%); font-size:7px; color:var(--text3); pointer-events:none;"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="iba-stat-row" style="white-space: nowrap;">
+          <div class="iba-stat-val" 
+               onclick="openMaintBudgetDetailModal()" 
+               data-tooltip="点击查看费用构成明细清单"
+               style="color:${valColor}; font-size:26px; white-space: nowrap; display: inline-flex; align-items: baseline; gap: 5px; cursor: pointer; transition: transform 0.15s, opacity 0.15s; border-bottom: 1px dashed ${valColor};"
+               onmouseover="this.style.opacity='0.85'; this.style.transform='scale(1.02)';"
+               onmouseout="this.style.opacity='1'; this.style.transform='scale(1)';">
             ${formatLargeNum(nextCheckTotalCost)} <span style="font-size:13px; color:var(--text3); display: inline-flex; align-items: center;">${W_ICON}</span>
           </div>
-          <span class="iba-badge neu" style="white-space: nowrap; flex-shrink: 0;">3趟内预算</span>
         </div>
+
         <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text3); font-family: var(--mono); white-space: nowrap; gap: 8px;">
           <span>历史累计已支出</span>
-          <span style="color: var(--text1); font-weight: 600; white-space: nowrap; display: inline-flex; align-items: baseline; gap: 4px;">${formatLargeNum(totalHistoricalSpent)} ${W_ICON}</span>
+          <span onclick="openMaintHistoryDetailModal()"
+                data-tooltip="点击查看各飞机历史检修支出明细"
+                style="color: var(--text1); font-weight: 600; white-space: nowrap; display: inline-flex; align-items: baseline; gap: 4px; cursor: pointer; border-bottom: 1px dashed var(--border-lit); transition: all 0.15s;"
+                onmouseover="this.style.color='var(--cyan)';"
+                onmouseout="this.style.color='var(--text1)';">
+            ${formatLargeNum(totalHistoricalSpent)} ${W_ICON}
+          </span>
         </div>
-        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
-          <div class="bar-fill cyan" style="width: 100%;"></div>
+        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input); flex: none;">
+          <div class="bar-fill" style="width: 100%; height: 100%; background: ${barGradient}; transition: background 0.3s;"></div>
         </div>
       </div>
 
@@ -3528,8 +4037,8 @@ function renderMaintenance() {
           <span>机队总编制</span>
           <span style="color: var(--text1); font-weight: 600;">${fleet.length} 架</span>
         </div>
-        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
-          <div class="bar-fill green" style="width: ${Math.round((filtered.length / (fleet.length || 1)) * 100)}%;"></div>
+        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input); flex: none;">
+          <div class="bar-fill green" style="width: ${Math.round((filtered.length / (fleet.length || 1)) * 100)}%; height: 100%;"></div>
         </div>
       </div>
     `;
@@ -3689,7 +4198,7 @@ function renderMaintenance() {
             ${m.tripsToSmall === 0 ? '<span style="color:var(--red);"><i class="fa-solid fa-triangle-exclamation"></i> 即刻进厂</span>' : `剩 <strong>${m.tripsToSmall}</strong> 趟`}
           </div>
           <div style="font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:2px;">
-            预计在 Lv.${m.smallTargetLv || '—'} 检修
+            预计在 ${formatMaintStage(m.smallTargetLv)} 检修
           </div>
         </td>
 
@@ -3699,7 +4208,7 @@ function renderMaintenance() {
             ${m.tripsToLarge === 0 ? '<span style="color:var(--red);"><i class="fa-solid fa-triangle-exclamation"></i> 即刻进厂</span>' : `剩 <strong>${m.tripsToLarge}</strong> 趟`}
           </div>
           <div style="font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:2px;">
-            预计在 Lv.${m.largeTargetLv || '—'} 检修
+            预计在 ${formatMaintStage(m.largeTargetLv)} 检修
           </div>
         </td>
 
