@@ -3239,7 +3239,7 @@ function calcPlaneMaintenance(a) {
   // 4. 前瞻预测：推算距离下一次小修与大修的剩余趟数
   let simSmall = pSmall;
   let simLarge = pLarge;
-  let simStage = (currentProgress === currentCap) ? currentLevel + 1 : currentLevel;
+  let simStage = currentLevel + 1;
   let futureTrips = (currentProgress === currentCap) ? 0 : (currentCap - currentProgress);
 
   let tripsToSmall = null;
