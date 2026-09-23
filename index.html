@@ -3084,7 +3084,7 @@ function calcPlaneMaintenance(a) {
     const need = K * maint;
 
     // 进入该等级执行飞行前，必须确保具备该等级的点数门槛
-    if (pSmall < need) { pSmall += 100; smallChecksDone++; }
+    if (pSmall < need + maint * 1) { pSmall += 100; smallChecksDone++; }
     if (pLarge < need) { pLarge += 400; largeChecksDone++; }
 
     if (totalTrips >= tripsAccum + K) {
