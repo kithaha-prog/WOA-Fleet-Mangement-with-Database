@@ -3204,7 +3204,13 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * 核心算法：修复临界点结算跳出 Bug，精准结算 10/10 落地状态
+ * 依据官方 400 MP 维保循环图重构的维保推算引擎
+ * 循环规则：
+ * 1. 周期 400 MP，包含 3 次小修与 1 次大修
+ * 2. 消耗 100 MP -> 第 1 次小修 (+100 MP)
+ * 3. 消耗 200 MP -> 第 2 次小修 (+100 MP)
+ * 4. 消耗 300 MP -> 第 3 次小修 (+200 MP)
+ * 5. 消耗 400 MP -> 大修 (+400 MP)，小修不维护，闭环复原为 (小:100, 大:400)
  */
 function calcPlaneMaintenance(a) {
   const maint = parseFloat(a.maint) || 0;
@@ -3237,47 +3243,21 @@ function calcPlaneMaintenance(a) {
     };
   }
 
-  // 1. 推算实际已执飞总趟数
+  // 1. 实际已执飞总趟数
   const totalTrips = Math.floor(totalDist / roundTripDist);
 
-  // 2. 模拟历史真实步进过程
-  let pSmall = 100;
-  let pLarge = 400;
+  // 2. 解耦计算：合同升级进度 (Lv.1~Lv.10 阶梯)
   let stage = 1;
   let tripsAccum = 0;
-  let smallChecksDone = 0;
-  let largeChecksDone = 0;
-
   let currentLevel = 1;
   let currentProgress = 0;
   let currentCap = 1;
 
   while (true) {
-      const K = Math.min(stage, 10);
-      const need = K * maint;
-      
-      // 计算下一轮的飞行消耗门槛
-      const nextK = Math.min(stage + 1, 10);
-      const nextNeed = nextK * maint;
-
-      // 1. 常规门槛检查：如果当前这一轮本身都飞不完，必须补足
-      if (pSmall < need) { pSmall += 100; smallChecksDone++; }
-      if (pLarge < need) { pLarge += 400; largeChecksDone++; }
-
-      // 2. 【核心新增】超前预判：如果这轮飞完后大修剩余不够跑下一轮，在 0/K 阶段直接提前小修 +100
-      if ((pLarge - need) < nextNeed) {
-        pSmall += 100;
-        smallChecksDone++;
-      }
-
-      if (totalTrips >= tripsAccum + K) {
-        pSmall -= need;
-        pLarge -= need;
-        tripsAccum += K;
-
+    const K = Math.min(stage, 10);
+    if (totalTrips >= tripsAccum + K) {
+      tripsAccum += K;
       if (totalTrips === tripsAccum) {
-        // 正好完成本等级落地（如 9/9 落地或第 10 级某轮 10/10 落地）
-        // 停留在停机坪待续约，不提前对下一阶段加点，结算并退出
         currentLevel = Math.min(stage, 10);
         currentProgress = K;
         currentCap = K;
@@ -3285,75 +3265,137 @@ function calcPlaneMaintenance(a) {
       }
       stage++;
     } else {
-      // 处于本等级内部未飞完状态（如 7/10）
-      const doneInStage = totalTrips - tripsAccum;
-      pSmall -= doneInStage * maint;
-      pLarge -= doneInStage * maint;
       currentLevel = Math.min(stage, 10);
-      currentProgress = doneInStage;
+      currentProgress = totalTrips - tripsAccum;
       currentCap = K;
       break;
     }
   }
 
-  // 3. 读取用户手动校准的真实点数
+  // 3. 严格按照官方状态机模拟已执飞的维保历史
+  let pSmall = 100;
+  let pLarge = 400;
+  let cycleSmallChecks = 0; // 当前周期内已完成的小修次数 (0, 1, 2)
+  let smallChecksDone = 0;
+  let largeChecksDone = 0;
+
+  for (let t = 0; t < totalTrips; t++) {
+    // 若剩余点数不足支撑下一次执飞，则在起飞前触发维护
+    if (pSmall < maint) {
+      if (cycleSmallChecks < 2) {
+        pSmall += 100;
+        cycleSmallChecks++;
+      } else {
+        // 第 3 次小修：官方逻辑 +200 MP
+        pSmall += 200;
+        cycleSmallChecks = 0;
+      }
+      smallChecksDone++;
+    }
+
+    if (pLarge < maint) {
+      pLarge += 400;
+      largeChecksDone++;
+    }
+
+    // 执飞消耗
+    pSmall -= maint;
+    pLarge -= maint;
+  }
+
+  // 4. 读取用户手动校准的点数（如有手动录入优先采用）
+  let isCalibrated = false;
   if (a.calibSmall !== undefined && a.calibSmall !== null && a.calibSmall !== '') {
     pSmall = parseFloat(a.calibSmall);
+    isCalibrated = true;
   }
   if (a.calibLarge !== undefined && a.calibLarge !== null && a.calibLarge !== '') {
     pLarge = parseFloat(a.calibLarge);
+    isCalibrated = true;
   }
+
+  // 若存在手动校准，通过 (pSmall, pLarge) 的差值特征反推当前所处的周期阶段
+  if (isCalibrated) {
+    if (pSmall > pLarge) {
+      // 处于第 4 阶段（已完成第 3 次小修，小修余量大于大修余量）
+      cycleSmallChecks = 0;
+    } else if (pLarge > 200) {
+      // 处于第 1 阶段（尚未做第 1 次小修）
+      cycleSmallChecks = 0;
+    } else if (pLarge > 100) {
+      // 处于第 2 阶段（已做第 1 次小修）
+      cycleSmallChecks = 1;
+    } else {
+      // 处于第 3 阶段（已做第 2 次小修，下一次小修将 +200）
+      cycleSmallChecks = 2;
+    }
+  }
+
   if (a.extraSmallChecks) smallChecksDone += parseInt(a.extraSmallChecks) || 0;
   if (a.extraLargeChecks) largeChecksDone += parseInt(a.extraLargeChecks) || 0;
 
   const totalSpentDone = (smallChecksDone * smallCost) + (largeChecksDone * largeCost);
 
-  // 4. 前瞻预测：推算距离下一次小修与大修的剩余趟数
+  // 辅助函数：根据累计趟数获取所处的等级节点文案
+  function getStageLevelForTrip(targetTrip) {
+    let s = 1;
+    let acc = 0;
+    while (true) {
+      const K = Math.min(s, 10);
+      acc += K;
+      if (targetTrip <= acc) {
+        return Math.min(s, 10);
+      }
+      s++;
+    }
+  }
+
+  // 5. 前瞻预测：推算距离下一次小修和大修的剩余趟数与检修节点
   let simSmall = pSmall;
   let simLarge = pLarge;
-  let simStage = currentLevel + 1;
-  let futureTrips = (currentProgress === currentCap) ? 0 : (currentCap - currentProgress);
+  let simCycleSmall = cycleSmallChecks;
+  let simTrips = totalTrips;
+  let futureTrips = 0;
 
   let tripsToSmall = null;
   let tripsToLarge = null;
   let smallTargetLv = null;
   let largeTargetLv = null;
 
-  if (currentProgress < currentCap) {
-    const remInStage = currentCap - currentProgress;
-    simSmall -= remInStage * maint;
-    simLarge -= remInStage * maint;
-  }
+  // 最多向前推算 600 趟以覆盖多次大修周期
+  for (let step = 0; step < 600; step++) {
+    const needSmall = simSmall < maint;
+    const needLarge = simLarge < maint;
 
-  for (let s = simStage; s < simStage + 120; s++) {
-    const K = Math.min(s, 10);
-    const need = K * maint;
-    const nextK = Math.min(s + 1, 10);
-    const nextNeed = nextK * maint;
-
-    if (tripsToSmall === null && simSmall < need) {
+    if (needSmall && tripsToSmall === null) {
       tripsToSmall = futureTrips;
-      smallTargetLv = Math.min(s, 10);
+      smallTargetLv = getStageLevelForTrip(simTrips);
     }
-    if (tripsToLarge === null && simLarge < need) {
+    if (needLarge && tripsToLarge === null) {
       tripsToLarge = futureTrips;
-      largeTargetLv = Math.min(s, 10);
+      largeTargetLv = getStageLevelForTrip(simTrips);
     }
 
     if (tripsToSmall !== null && tripsToLarge !== null) break;
 
-    // 常规补点
-    if (simSmall < need) simSmall += 100;
-    if (simLarge < need) simLarge += 400;
-
-    // 预测时同步执行提前小修规则
-    if ((simLarge - need) < nextNeed) {
-      simSmall += 100;
+    // 模拟维护充值
+    if (needSmall) {
+      if (simCycleSmall < 2) {
+        simSmall += 100;
+        simCycleSmall++;
+      } else {
+        simSmall += 200;
+        simCycleSmall = 0;
+      }
+    }
+    if (needLarge) {
+      simLarge += 400;
     }
 
-    simSmall -= need;
-    simLarge -= need;
-    futureTrips += K;
+    simSmall -= maint;
+    simLarge -= maint;
+    futureTrips++;
+    simTrips++;
   }
 
   let status = 'safe';
@@ -4261,18 +4303,19 @@ function jumpMaintPage() {
   }
 }
 
-/**
- * 快捷登记：游戏里刚修完，一键增加点数并记录已修次数
- */
 function quickRegisterMaint(acId, type) {
   const ac = fleet.find(a => a.id === acId);
   if (!ac) return;
 
   const currentInfo = calcPlaneMaintenance(ac);
   if (type === 'small') {
-    ac.calibSmall = Math.round((currentInfo.pSmall + 100) * 100) / 100;
+    // 如果当前大修池 <= 100 且小修池耗尽，表明当前正是周期的第 3 次小修（官方机制加 200 点）
+    const isThirdCheck = currentInfo.pLarge <= 100 && currentInfo.pSmall < parseFloat(ac.maint);
+    const addedPoints = isThirdCheck ? 200 : 100;
+
+    ac.calibSmall = Math.round((currentInfo.pSmall + addedPoints) * 100) / 100;
     ac.extraSmallChecks = (parseInt(ac.extraSmallChecks) || 0) + 1;
-    toast(`${ac.reg} 已登记完成小修 (+100 点)，当前小修点数：${ac.calibSmall}`);
+    toast(`${ac.reg} 已登记完成小修 (+${addedPoints} 点)，当前小修点数：${ac.calibSmall}`);
   } else if (type === 'large') {
     ac.calibLarge = Math.round((currentInfo.pLarge + 400) * 100) / 100;
     ac.extraLargeChecks = (parseInt(ac.extraLargeChecks) || 0) + 1;
