@@ -3031,7 +3031,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * 核心算法：全自动升级感知，无需手动确认升级，修复临界点抢跑
+ * 核心算法：修复临界点结算跳出 Bug，精准结算 10/10 落地状态
  */
 function calcPlaneMaintenance(a) {
   const maint = parseFloat(a.maint) || 0;
@@ -3064,10 +3064,10 @@ function calcPlaneMaintenance(a) {
     };
   }
 
-  // 1. 推算已完成总趟数
+  // 1. 推算实际已执飞总趟数
   const totalTrips = Math.floor(totalDist / roundTripDist);
 
-  // 2. 模拟历史步进：只有真正飞入了下一阶段，才扣减并结算升级保养
+  // 2. 模拟历史真实步进过程
   let pSmall = 100;
   let pLarge = 400;
   let stage = 1;
@@ -3083,31 +3083,27 @@ function calcPlaneMaintenance(a) {
     const K = Math.min(stage, 10);
     const need = K * maint;
 
-    // 检查进入此阶段是否需要检修
-    const willNeedSmall = pSmall < need;
-    const willNeedLarge = pLarge < need;
+    // 进入该等级执行飞行前，必须确保具备该等级的点数门槛
+    if (pSmall < need) { pSmall += 100; smallChecksDone++; }
+    if (pLarge < need) { pLarge += 400; largeChecksDone++; }
 
-    if (totalTrips > tripsAccum + K) {
-      // 已经飞越此等级，说明当时肯定已在游戏里点击升级保养过
-      if (willNeedSmall) { pSmall += 100; smallChecksDone++; }
-      if (willNeedLarge) { pLarge += 400; largeChecksDone++; }
-
+    if (totalTrips >= tripsAccum + K) {
+      // 这 K 趟已经全部飞完，完整扣除本等级点数消耗
       pSmall -= need;
       pLarge -= need;
       tripsAccum += K;
-      stage++;
-    } else if (totalTrips === tripsAccum + K) {
-      // 【全自动关键点】：刚好飞完该等级的最后一趟（如 9/9 或 10/10 落地）
-      // 飞机停在停机坪等待签约，尚未开启下一阶段，因此绝不提前扣钱加点
-      currentLevel = Math.min(stage, 10);
-      currentProgress = K;
-      currentCap = K;
-      break;
-    } else {
-      // 处于本等级正常飞行过程中（如 8/10）
-      if (willNeedSmall) { pSmall += 100; smallChecksDone++; }
-      if (willNeedLarge) { pLarge += 400; largeChecksDone++; }
 
+      if (totalTrips === tripsAccum) {
+        // 正好完成本等级落地（如 9/9 落地或第 10 级某轮 10/10 落地）
+        // 停留在停机坪待续约，不提前对下一阶段加点，结算并退出
+        currentLevel = Math.min(stage, 10);
+        currentProgress = K;
+        currentCap = K;
+        break;
+      }
+      stage++;
+    } else {
+      // 处于本等级内部未飞完状态（如 7/10）
       const doneInStage = totalTrips - tripsAccum;
       pSmall -= doneInStage * maint;
       pLarge -= doneInStage * maint;
@@ -3118,17 +3114,19 @@ function calcPlaneMaintenance(a) {
     }
   }
 
-  // 3. 读取用户手动校准的真实点数（用于对齐那部分在游戏里提前保养过的飞机）
+  // 3. 读取用户手动校准的真实点数
   if (a.calibSmall !== undefined && a.calibSmall !== null && a.calibSmall !== '') {
     pSmall = parseFloat(a.calibSmall);
   }
   if (a.calibLarge !== undefined && a.calibLarge !== null && a.calibLarge !== '') {
     pLarge = parseFloat(a.calibLarge);
   }
+  if (a.extraSmallChecks) smallChecksDone += parseInt(a.extraSmallChecks) || 0;
+  if (a.extraLargeChecks) largeChecksDone += parseInt(a.extraLargeChecks) || 0;
 
   const totalSpentDone = (smallChecksDone * smallCost) + (largeChecksDone * largeCost);
 
-  // 4. 前瞻预测：计算距离下一次大小修还剩几趟
+  // 4. 前瞻预测：推算距离下一次小修与大修的剩余趟数
   let simSmall = pSmall;
   let simLarge = pLarge;
   let simStage = (currentProgress === currentCap) ? currentLevel + 1 : currentLevel;
@@ -3168,7 +3166,6 @@ function calcPlaneMaintenance(a) {
     futureTrips += K;
   }
 
-  // 紧迫度评级：如果正好在待升级关口且点数不足，直接标红提醒待升级
   let status = 'safe';
   const minTrips = Math.min(tripsToSmall ?? 999, tripsToLarge ?? 999);
   if (minTrips === 0 || minTrips <= 3) status = 'urgent';
