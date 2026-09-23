@@ -1832,6 +1832,9 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
       <div class="mobile-sheet-item" data-tab="countries" onclick="mobileSheetGo('countries')"><i class="fa-solid fa-flag"></i>国家排名</div>
       <div class="mobile-sheet-item" data-tab="profitchart" onclick="mobileSheetGo('profitchart')"><i class="fa-solid fa-chart-line"></i>利润曲线表</div>
       <div class="mobile-sheet-item" data-tab="roi" onclick="mobileSheetGo('roi')"><i class="fa-solid fa-money-bill-trend-up"></i>资产回本进度</div>
+      <div class="mobile-sheet-item" data-tab="maintenance" onclick="mobileSheetGo('maintenance')">
+        <i class="fa-solid fa-wrench"></i>维保监控
+        </div>
       <div class="mobile-sheet-item" data-tab="timeline" onclick="mobileSheetGo('timeline')"><i class="fa-solid fa-timeline"></i>扩张时间轴</div>
       <div class="mobile-sheet-item" data-tab="routes" onclick="mobileSheetGo('routes')"><i class="fa-solid fa-route"></i>记录</div>
       <div class="mobile-sheet-item" data-tab="logic" onclick="mobileSheetGo('logic')"><i class="fa-solid fa-code-branch"></i>逻辑说明</div>
@@ -1867,6 +1870,10 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
       <div class="nav-item" data-view="roi" onclick="showView('roi',this)" title="快捷键: R">
   <i class="fa-solid fa-money-bill-trend-up"></i><span>资产回本进度</span>
 </div>
+      <!-- 维保监控入口 -->
+      <div class="nav-item" data-view="maintenance" onclick="showView('maintenance',this)" title="快捷键: 8">
+      <i class="fa-solid fa-wrench"></i><span>维保监控</span>
+      </div>
       <div class="nav-item" data-view="timeline" onclick="showView('timeline',this)" title="快捷键: 3"><i class="fa-solid fa-timeline"></i><span>扩张时间轴</span></div>
       <div class="nav-item" data-view="fleet" onclick="showView('fleet',this)" title="快捷键: 4"><i class="fa-solid fa-list-check"></i><span>管理机队</span><span class="fleet-count-badge" id="fleet-badge">0</span></div>
       <div class="nav-item" data-view="add" onclick="showView('add',this)" title="快捷键: 5 / N"><i class="fa-solid fa-plane-circle-check"></i><span>注册新飞机</span></div>
@@ -2044,6 +2051,65 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
         <div id="fleet-map-container" style="height: 65vh; border-radius: var(--r-md); overflow: hidden; z-index: 1;"></div>
         <div id="fleet-globe-container" style="height: 65vh; border-radius: var(--r-md); overflow: hidden; z-index: 1; display:none;"></div>
       </div>
+    </section>
+
+    <!-- 维保监控看板 -->
+    <section class="view" id="view-maintenance">
+    <div class="dashboard-top-row">
+        <div class="page-header">
+        <h1><i class="fa-solid fa-screwdriver-wrench"></i> 维保监控大厅</h1>
+        <p>依据飞行里程与升级进度，精准推算当前大小修点数、未来检修节点与资金储备需求。</p>
+        </div>
+        <!-- 顶部四联 KPI 看板 -->
+        <div class="stat-grid" id="maint-stat-grid"></div>
+    </div>
+
+    <div class="runway-stripe"></div>
+
+    <!-- 工具与筛选栏 -->
+    <div class="filter-bar" style="justify-content: space-between; flex-wrap: wrap;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <select id="mf-airport" onchange="renderMaintenance()">
+            <option value="">全部驻扎基地</option>
+        </select>
+        <select id="mf-status" onchange="renderMaintenance()">
+            <option value="">全部维保状态</option>
+            <option value="urgent">🔴 急需检修 (剩 ≤ 3 趟)</option>
+            <option value="warning">🟡 预警关注 (剩 4~8 趟)</option>
+            <option value="safe">🟢 状态充沛 (剩 9 趟以上)</option>
+        </select>
+        <select id="mf-sort" onchange="renderMaintenance()">
+            <option value="small_asc">按距小修剩余趟数 (最近在前 ↑)</option>
+            <option value="large_asc">按距大修剩余趟数 (最近在前 ↑)</option>
+            <option value="cost_desc">按预估检修费用 (最高在前 ↓)</option>
+            <option value="level_desc">按当前等级 (Lv.10 在前 ↓)</option>
+            <option value="reg_asc">按注册号 A-Z</option>
+        </select>
+        </div>
+        <div style="font-size:12.5px; color:var(--text3); font-family:var(--mono);" id="maint-record-count">
+        共 0 架飞机受控
+        </div>
+    </div>
+
+    <!-- 飞机维保卡片列表 -->
+    <div class="table-wrap" id="maint-table-wrap">
+        <table>
+        <thead id="maint-thead">
+            <tr>
+            <th>飞机身份</th>
+            <th>驻扎 / 执飞航线</th>
+            <th>单次消耗</th>
+            <th>当前等级进度</th>
+            <th>小维修点数 (A检)</th>
+            <th>大维修点数 (C/D检)</th>
+            <th>下一次小修预测</th>
+            <th>下一次大修预测</th>
+            <th>健康状态</th>
+            </tr>
+        </thead>
+        <tbody id="maint-tbody"></tbody>
+        </table>
+    </div>
     </section>
 
     <section class="view" id="view-roi">
@@ -2959,6 +3025,546 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 </div>
 
 <script>
+
+// ═══════════════════════════════════════════════════════════════
+// 维保监控引擎：核心推算算法与渲染逻辑
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 核心算法：基于飞行总里程反推当前等级、点数剩余，统计已修次数/花费，并预测未来检修节点
+ */
+function calcPlaneMaintenance(a) {
+  const maint = parseFloat(a.maint) || 0;
+  const dist = parseInt(a.dist) || 0;
+  const totalDist = parseInt(a.totalDist) || 0;
+  const roundTripDist = dist * 2;
+
+  const dbInfo = (typeof DB !== 'undefined') ? DB.find(d => d.icao === a.icao) : null;
+  const smallCost = dbInfo ? (dbInfo.small || dbInfo.aCheck || 0) : (a.small || 0);
+  const largeCost = dbInfo ? (dbInfo.large || dbInfo.cdCheck || 0) : (a.large || 0);
+
+  if (roundTripDist <= 0 || maint <= 0) {
+    return {
+      valid: false,
+      reason: '未配置航程或消耗点数',
+      totalTrips: 0,
+      level: 1,
+      progress: 0,
+      cap: 1,
+      pSmall: 100,
+      pLarge: 400,
+      smallChecksDone: 0,
+      largeChecksDone: 0,
+      totalSpentDone: 0,
+      tripsToSmall: 999,
+      tripsToLarge: 999,
+      smallCost,
+      largeCost,
+      status: 'safe'
+    };
+  }
+
+  // 1. 推算已完成总趟数
+  const totalTrips = Math.floor(totalDist / roundTripDist);
+
+  // 2. 模拟历史步进过程，并精确统计已完成的小修/大修次数
+  let pSmall = 100;
+  let pLarge = 400;
+  let stage = 1;
+  let tripsAccum = 0;
+  let smallChecksDone = 0;
+  let largeChecksDone = 0;
+
+  let currentLevel = 1;
+  let currentProgress = 0;
+  let currentCap = 1;
+
+  while (true) {
+    const K = Math.min(stage, 10);
+    const need = K * maint;
+
+    // 升级关口检查：不足则叠加保养点数 (+100 / +400)，两者独立计数
+    if (pSmall < need) {
+      pSmall += 100;
+      smallChecksDone++;
+    }
+    if (pLarge < need) {
+      pLarge += 400;
+      largeChecksDone++;
+    }
+
+    if (totalTrips >= tripsAccum + K) {
+      pSmall -= need;
+      pLarge -= need;
+      tripsAccum += K;
+      stage++;
+    } else {
+      const doneInStage = totalTrips - tripsAccum;
+      pSmall -= doneInStage * maint;
+      pLarge -= doneInStage * maint;
+      currentLevel = Math.min(stage, 10);
+      currentProgress = doneInStage;
+      currentCap = K;
+      break;
+    }
+  }
+
+  // 3. 支持用户手动校准当前点数（如果有手动登记过校准，以真实点数为准）
+  if (a.calibSmall !== undefined && a.calibSmall !== null && a.calibSmall !== '') {
+    pSmall = parseFloat(a.calibSmall);
+  }
+  if (a.calibLarge !== undefined && a.calibLarge !== null && a.calibLarge !== '') {
+    pLarge = parseFloat(a.calibLarge);
+  }
+  if (a.extraSmallChecks) smallChecksDone += parseInt(a.extraSmallChecks) || 0;
+  if (a.extraLargeChecks) largeChecksDone += parseInt(a.extraLargeChecks) || 0;
+
+  const totalSpentDone = (smallChecksDone * smallCost) + (largeChecksDone * largeCost);
+
+  // 4. 前瞻预测：从当前断面继续向后独立推演，计算下一次小修与大修的剩余趟数
+  let simSmall = pSmall;
+  let simLarge = pLarge;
+  let simStage = stage;
+  let futureTrips = 0;
+
+  let tripsToSmall = null;
+  let tripsToLarge = null;
+  let smallTargetLv = null;
+  let largeTargetLv = null;
+
+  // 先飞完当前等级未完成的趟数
+  const remInStage = currentCap - currentProgress;
+  simSmall -= remInStage * maint;
+  simLarge -= remInStage * maint;
+  futureTrips += remInStage;
+  simStage++;
+
+  for (let s = simStage; s < simStage + 120; s++) {
+    const K = Math.min(s, 10);
+    const need = K * maint;
+
+    if (tripsToSmall === null && simSmall < need) {
+      tripsToSmall = futureTrips;
+      smallTargetLv = Math.min(s, 10);
+    }
+    if (tripsToLarge === null && simLarge < need) {
+      tripsToLarge = futureTrips;
+      largeTargetLv = Math.min(s, 10);
+    }
+
+    if (tripsToSmall !== null && tripsToLarge !== null) break;
+
+    // 大小修完全独立触发叠加
+    if (simSmall < need) simSmall += 100;
+    if (simLarge < need) simLarge += 400;
+
+    simSmall -= need;
+    simLarge -= need;
+    futureTrips += K;
+  }
+
+  // 紧迫度评级
+  let status = 'safe';
+  const minTrips = Math.min(tripsToSmall ?? 999, tripsToLarge ?? 999);
+  if (minTrips <= 3) status = 'urgent';
+  else if (minTrips <= 8) status = 'warning';
+
+  return {
+    valid: true,
+    totalTrips,
+    level: currentLevel,
+    progress: currentProgress,
+    cap: currentCap,
+    pSmall: Math.round(pSmall * 100) / 100,
+    pLarge: Math.round(pLarge * 100) / 100,
+    smallChecksDone,
+    largeChecksDone,
+    totalSpentDone,
+    tripsToSmall: tripsToSmall ?? 0,
+    tripsToLarge: tripsToLarge ?? 0,
+    smallTargetLv,
+    largeTargetLv,
+    smallCost,
+    largeCost,
+    status
+  };
+}
+
+// 维保监控看板的专属排序状态
+// 维保监控看板排序状态
+let maintSortCol = 'tripsToSmall'; 
+let maintSortAsc = true;          
+
+const MAINT_COLUMNS = [
+  { id: 'seq', label: '#', sortable: false },
+  { id: 'reg', label: '注册号', sortable: true },
+  { id: 'icao', label: '机型', sortable: true },
+  { id: 'base', label: '基地', sortable: true },
+  { id: 'dest', label: '执飞航线', sortable: true },
+  { id: 'maint', label: '单次消耗', sortable: true },
+  { id: 'level', label: '当前等级进度', sortable: true },
+  { id: 'pSmall', label: '小维修 (当前/已修)', sortable: true },
+  { id: 'pLarge', label: '大维修 (当前/已修)', sortable: true },
+  { id: 'tripsToSmall', label: '下一次小修预测', sortable: true },
+  { id: 'tripsToLarge', label: '下一次大修预测', sortable: true },
+  { id: 'status', label: '健康状态', sortable: true },
+  { id: 'action', label: '点数校准 / 登记', sortable: false }
+];
+
+function handleMaintSort(colId) {
+  if (maintSortCol === colId) {
+    maintSortAsc = !maintSortAsc;
+  } else {
+    maintSortCol = colId;
+    maintSortAsc = true;
+  }
+  renderMaintenance();
+}
+
+function renderMaintenance() {
+  const airportFilter = document.getElementById('mf-airport')?.value || '';
+  const statusFilter = document.getElementById('mf-status')?.value || '';
+
+  const list = fleet.map((a, originalIndex) => {
+    const maintInfo = calcPlaneMaintenance(a);
+    return { ...a, maintInfo, originalIndex };
+  });
+
+  let filtered = list.filter(item => {
+    if (airportFilter && item.base !== airportFilter) return false;
+    if (statusFilter && item.maintInfo.status !== statusFilter) return false;
+    return true;
+  });
+
+  // 排序
+  filtered.sort((a, b) => {
+    const ma = a.maintInfo;
+    const mb = b.maintInfo;
+    let res = 0;
+    switch (maintSortCol) {
+      case 'reg': res = (a.reg || '').localeCompare(b.reg || ''); break;
+      case 'icao': res = (a.icao || '').localeCompare(b.icao || ''); break;
+      case 'base': res = (a.base || '').localeCompare(b.base || ''); break;
+      case 'dest': res = (a.dest || '').localeCompare(b.dest || ''); break;
+      case 'maint': res = (parseFloat(a.maint) || 0) - (parseFloat(b.maint) || 0); break;
+      case 'level':
+        if (ma.level !== mb.level) res = ma.level - mb.level;
+        else res = (ma.progress / ma.cap) - (mb.progress / mb.cap);
+        break;
+      case 'pSmall': res = ma.pSmall - mb.pSmall; break;
+      case 'pLarge': res = ma.pLarge - mb.pLarge; break;
+      case 'tripsToSmall': res = ma.tripsToSmall - mb.tripsToSmall; break;
+      case 'tripsToLarge': res = ma.tripsToLarge - mb.tripsToLarge; break;
+      case 'status':
+        const rank = { urgent: 1, warning: 2, safe: 3 };
+        res = (rank[ma.status] || 9) - (rank[mb.status] || 9);
+        break;
+      default: res = a.originalIndex - b.originalIndex;
+    }
+    return maintSortAsc ? res : -res;
+  });
+
+  // 统计顶部指标（包含历史已支出维保金总额）
+  let urgentCount = 0;
+  let warningCount = 0;
+  let nextCheckTotalCost = 0;
+  let totalHistoricalSpent = 0;
+
+  filtered.forEach(item => {
+    const m = item.maintInfo;
+    if (!m.valid) return;
+    if (m.status === 'urgent') urgentCount++;
+    if (m.status === 'warning') warningCount++;
+    if (m.tripsToSmall <= 3) nextCheckTotalCost += m.smallCost;
+    if (m.tripsToLarge <= 3) nextCheckTotalCost += m.largeCost;
+    totalHistoricalSpent += m.totalSpentDone;
+  });
+
+  const totalFiltered = filtered.length || 1;
+  const urgentPct = Math.round((urgentCount / totalFiltered) * 100);
+  const warningPct = Math.round((warningCount / totalFiltered) * 100);
+  const isFiltered = airportFilter !== '' || statusFilter !== '';
+
+  const statGrid = document.getElementById('maint-stat-grid');
+  if (statGrid) {
+    statGrid.innerHTML = `
+      <div class="iba-stat-card" style="padding: 14px 16px 14px; min-width: 175px;">
+        <div class="iba-stat-title">急需检修飞机</div>
+        <div class="iba-stat-row">
+          <div class="iba-stat-val" style="color:var(--red);">${urgentCount} <span style="font-size:13px; color:var(--text3);">架</span></div>
+          <span class="iba-badge neg"><i class="fa-solid fa-triangle-exclamation"></i> ≤ 3趟内</span>
+        </div>
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono);">
+          <span>占受控机队</span>
+          <span style="color: var(--red); font-weight: 600;">${urgentPct}%</span>
+        </div>
+        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
+          <div class="bar-fill" style="width: ${urgentPct}%; background: var(--red); box-shadow: 0 0 6px var(--red-glow);"></div>
+        </div>
+      </div>
+
+      <div class="iba-stat-card" style="padding: 14px 16px 14px; min-width: 175px;">
+        <div class="iba-stat-title">预警关注飞机</div>
+        <div class="iba-stat-row">
+          <div class="iba-stat-val" style="color:var(--amber);">${warningCount} <span style="font-size:13px; color:var(--text3);">架</span></div>
+          <span class="iba-badge neg" style="color:var(--amber); background:var(--amber-glow);"><i class="fa-solid fa-clock"></i> 4~8趟</span>
+        </div>
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono);">
+          <span>占受控机队</span>
+          <span style="color: var(--amber); font-weight: 600;">${warningPct}%</span>
+        </div>
+        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
+          <div class="bar-fill" style="width: ${warningPct}%; background: var(--amber); box-shadow: 0 0 6px var(--amber-glow);"></div>
+        </div>
+      </div>
+
+      <div class="iba-stat-card" style="padding: 14px 16px 14px; min-width: 200px;">
+        <div class="iba-stat-title">近期备用维保金</div>
+        <div class="iba-stat-row">
+          <div class="iba-stat-val" style="color:var(--cyan); font-size:22px;">
+            ${formatLargeNum(nextCheckTotalCost)} <span style="font-size:13px; color:var(--text3);">${W_ICON}</span>
+          </div>
+          <span class="iba-badge neu">3趟内预算</span>
+        </div>
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono);">
+          <span>历史累计已支出</span>
+          <span style="color: var(--text1); font-weight: 600;">${formatLargeNum(totalHistoricalSpent)} ${W_ICON}</span>
+        </div>
+        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
+          <div class="bar-fill cyan" style="width: 100%;"></div>
+        </div>
+      </div>
+
+      <div class="iba-stat-card" style="padding: 14px 16px 14px; min-width: 175px;">
+        <div class="iba-stat-title">当前受控机队</div>
+        <div class="iba-stat-row">
+          <div class="iba-stat-val">${filtered.length} <span style="font-size:13px; color:var(--text3);">架</span></div>
+          <span class="iba-badge ${isFiltered ? 'neu' : 'pos'}">
+            <i class="fa-solid ${isFiltered ? 'fa-filter' : 'fa-check'}"></i> ${isFiltered ? '已筛选' : '全机队'}
+          </span>
+        </div>
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); font-family: var(--mono);">
+          <span>机队总编制</span>
+          <span style="color: var(--text1); font-weight: 600;">${fleet.length} 架</span>
+        </div>
+        <div class="bar-track" style="height: 4px; margin-top: 5px; border: none; background: var(--bg-input);">
+          <div class="bar-fill green" style="width: ${Math.round((filtered.length / (fleet.length || 1)) * 100)}%;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 动态渲染表头
+  const thead = document.getElementById('maint-thead');
+  if (thead) {
+    thead.innerHTML = `<tr>` + MAINT_COLUMNS.map(col => {
+      if (!col.sortable) {
+        return `<th style="${col.id === 'seq' ? 'width:45px; text-align:center;' : ''}">${col.label}</th>`;
+      }
+      const isActive = maintSortCol === col.id;
+      const arrowIcon = isActive 
+        ? (maintSortAsc ? '<i class="fa-solid fa-arrow-up-short-wide"></i>' : '<i class="fa-solid fa-arrow-down-wide-short"></i>')
+        : '<i class="fa-solid fa-sort" style="opacity:0.2;"></i>';
+      return `<th class="sortable ${isActive ? 'active' : ''}" onclick="handleMaintSort('${col.id}')">${col.label} ${arrowIcon}</th>`;
+    }).join('') + `</tr>`;
+  }
+
+  const countEl = document.getElementById('maint-record-count');
+  if (countEl) countEl.textContent = `共 ${filtered.length} / ${fleet.length} 架飞机受控`;
+
+  const tbody = document.getElementById('maint-tbody');
+  if (!tbody) return;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding:36px; color:var(--text3); font-size:13px;"><i class="fa-solid fa-inbox" style="font-size:24px; display:block; margin-bottom:8px;"></i>无匹配的飞机记录</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((item, idx) => {
+    const m = item.maintInfo;
+    const seqNum = idx + 1;
+
+    if (!m.valid) {
+      return `<tr>
+        <td style="text-align:center; font-family:var(--mono); color:var(--text3);">${seqNum}</td>
+        <td><div class="reg-badge" onclick="openPopup('${item.id}')">${item.reg || '—'}</div></td>
+        <td><span style="font-family:var(--mono); font-weight:700;">${item.icao || '—'}</span></td>
+        <td><span class="hub-tag hub-spoke">${item.base || '—'}</span></td>
+        <td colspan="9" style="color:var(--amber); font-size:12px;"><i class="fa-solid fa-triangle-exclamation"></i> ${m.reason}</td>
+      </tr>`;
+    }
+
+    let statusBadge = `<span class="diff-badge diff-pos"><i class="fa-solid fa-shield-halved"></i> 充裕</span>`;
+    if (m.status === 'urgent') {
+      statusBadge = `<span class="diff-badge diff-neg" style="animation: coin-pulse-dot 1.5s infinite;"><i class="fa-solid fa-triangle-exclamation"></i> 急需检修</span>`;
+    } else if (m.status === 'warning') {
+      statusBadge = `<span class="diff-badge" style="background:var(--amber-glow); color:var(--amber); border:1px solid rgba(245,193,92,0.3);"><i class="fa-solid fa-clock"></i> 关注</span>`;
+    }
+
+    const pct = Math.round((m.progress / m.cap) * 100);
+
+    return `
+      <tr>
+        <!-- 序号 -->
+        <td style="text-align:center; font-family:var(--mono); color:var(--text3); font-size:11.5px; font-weight:600;">
+          ${seqNum}
+        </td>
+
+        <!-- 注册号 -->
+        <td>
+          <div class="reg-badge" style="cursor:pointer;" onclick="openPopup('${item.id}')" title="点击查看飞机档案">${item.reg}</div>
+        </td>
+
+        <!-- 机型 -->
+        <td>
+          <span style="font-family:var(--mono); font-weight:700; color:var(--text1); font-size:13px;">${item.icao}</span>
+        </td>
+
+        <!-- 基地 -->
+        <td>
+          <span class="hub-tag hub-focus" style="cursor:pointer; font-size:11px; padding:3px 8px;" onclick="openAirportInfo('${item.base}')" title="点击查看机场详情">
+            <i class="fa-solid fa-location-dot" style="margin-right:2px;"></i>${item.base || '—'}
+          </span>
+        </td>
+
+        <!-- 执飞航线 -->
+        <td>
+          <div style="font-family:var(--mono); font-weight:600; color:var(--cyan); font-size:12.5px;">
+            ➔ ${item.dest || '—'}
+          </div>
+          <div style="font-size:10.5px; color:var(--text3); font-family:var(--mono); margin-top:1px;">
+            往返 ${(item.dist || 0)*2} nm
+          </div>
+        </td>
+
+        <!-- 单次消耗 -->
+        <td style="font-family:var(--mono); font-weight:600; color:var(--amber); font-size:12px;">
+          -${item.maint} <span style="font-size:10px; color:var(--text3);">点/趟</span>
+        </td>
+
+        <!-- 当前等级进度 -->
+        <td style="min-width: 125px;">
+          <div style="display:flex; justify-content:space-between; font-size:11px; font-family:var(--mono); margin-bottom:4px;">
+            <strong style="color:var(--cyan);">Lv.${m.level}</strong>
+            <span style="color:var(--text2);">${m.progress} / ${m.cap} (${pct}%)</span>
+          </div>
+          <div class="bar-track" style="height:5px;">
+            <div class="bar-fill cyan" style="width:${pct}%;"></div>
+          </div>
+        </td>
+
+        <!-- 小维修点数 (含已小修次数标记) -->
+        <td>
+          <div style="font-family:var(--mono); font-weight:700; font-size:13px; color:${m.pSmall <= 20 ? 'var(--red)' : (m.pSmall <= 40 ? 'var(--amber)' : 'var(--text1)')};">
+            ${m.pSmall}
+          </div>
+          <div style="font-size:10.5px; color:var(--cyan); font-family:var(--mono); margin-top:2px;">
+            <i class="fa-solid fa-check-double"></i> 已做 <strong>${m.smallChecksDone}</strong> 次小修
+          </div>
+          <div style="font-size:10px; color:var(--text3); font-family:var(--mono);">
+            单次 A检: ${formatLargeNum(m.smallCost)} ${W_ICON}
+          </div>
+        </td>
+
+        <!-- 大维修点数 (含已大修次数标记) -->
+        <td>
+          <div style="font-family:var(--mono); font-weight:700; font-size:13px; color:${m.pLarge <= 50 ? 'var(--red)' : (m.pLarge <= 100 ? 'var(--amber)' : 'var(--text1)')};">
+            ${m.pLarge}
+          </div>
+          <div style="font-size:10.5px; color:var(--purple); font-family:var(--mono); margin-top:2px;">
+            <i class="fa-solid fa-shield-heart"></i> 已做 <strong>${m.largeChecksDone}</strong> 次大修
+          </div>
+          <div style="font-size:10px; color:var(--text3); font-family:var(--mono);">
+            单次 C/D检: ${formatLargeNum(m.largeCost)} ${W_ICON}
+          </div>
+        </td>
+
+        <!-- 下一次小修预测 -->
+        <td>
+          <div style="font-family:var(--mono); font-weight:700; font-size:12.5px; color:${m.tripsToSmall <= 3 ? 'var(--red)' : 'var(--text1)'};">
+            ${m.tripsToSmall === 0 ? '<span style="color:var(--red);">即刻进厂</span>' : `剩 <strong>${m.tripsToSmall}</strong> 趟`}
+          </div>
+          <div style="font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:2px;">
+            预计在 Lv.${m.smallTargetLv || '—'} 检修
+          </div>
+        </td>
+
+        <!-- 下一次大修预测 -->
+        <td>
+          <div style="font-family:var(--mono); font-weight:700; font-size:12.5px; color:${m.tripsToLarge <= 5 ? 'var(--red)' : 'var(--text1)'};">
+            ${m.tripsToLarge === 0 ? '<span style="color:var(--red);">即刻进厂</span>' : `剩 <strong>${m.tripsToLarge}</strong> 趟`}
+          </div>
+          <div style="font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:2px;">
+            预计在 Lv.${m.largeTargetLv || '—'} 检修
+          </div>
+        </td>
+
+        <!-- 健康状态 -->
+        <td>${statusBadge}</td>
+
+        <!-- 点数校准 / 快速登记 -->
+        <td style="white-space:nowrap;">
+          <button class="btn btn-ghost" onclick="quickRegisterMaint('${item.id}', 'small')" style="padding:3px 7px; font-size:10.5px; margin-right:4px;" title="刚刚在游戏里做了一次小修 (+100 点)">
+            +100 小修
+          </button>
+          <button class="btn btn-ghost" onclick="openCalibrateMaintModal('${item.id}')" style="padding:3px 7px; font-size:10.5px;" title="手动录入游戏内的真实剩余点数">
+            <i class="fa-solid fa-sliders"></i> 校准
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * 快捷登记：用户在游戏里刚点击了保养，一键为飞机加点
+ */
+function quickRegisterMaint(acId, type) {
+  const ac = fleet.find(a => a.id === acId);
+  if (!ac) return;
+
+  const currentInfo = calcPlaneMaintenance(ac);
+  if (type === 'small') {
+    // 小修点数 + 100，并记录额外小修次数
+    ac.calibSmall = Math.round((currentInfo.pSmall + 100) * 100) / 100;
+    ac.extraSmallChecks = (parseInt(ac.extraSmallChecks) || 0) + 1;
+    toast(`${ac.reg} 已成功登记小修 (+100 点)，当前小修点数：${ac.calibSmall}`);
+  } else if (type === 'large') {
+    // 大修点数 + 400，并记录额外大修次数
+    ac.calibLarge = Math.round((currentInfo.pLarge + 400) * 100) / 100;
+    ac.extraLargeChecks = (parseInt(ac.extraLargeChecks) || 0) + 1;
+    toast(`${ac.reg} 已成功登记大修 (+400 点)，当前大修点数：${ac.calibLarge}`);
+  }
+
+  persistFleet();
+  renderMaintenance();
+}
+
+/**
+ * 精准校准：弹出窗口，直接填入游戏截图中的真实剩余点数
+ */
+function openCalibrateMaintModal(acId) {
+  const ac = fleet.find(a => a.id === acId);
+  if (!ac) return;
+  const cur = calcPlaneMaintenance(ac);
+
+  const inputSmall = prompt(`【${ac.reg}】校准小维修剩余点数：\n（当前推算: ${cur.pSmall}，若游戏内如截图显示 170.6，可直接输入 170.6）`, cur.pSmall);
+  if (inputSmall === null) return; // 用户取消
+
+  const inputLarge = prompt(`【${ac.reg}】校准大维修剩余点数：\n（当前推算: ${cur.pLarge}，若游戏内如截图显示 70.6，可直接输入 70.6）`, cur.pLarge);
+  if (inputLarge === null) return;
+
+  const valSmall = parseFloat(inputSmall);
+  const valLarge = parseFloat(inputLarge);
+
+  if (!isNaN(valSmall)) ac.calibSmall = valSmall;
+  if (!isNaN(valLarge)) ac.calibLarge = valLarge;
+
+  persistFleet();
+  renderMaintenance();
+  toast(`${ac.reg} 维保点数已成功校准！`);
+}
+
 // GLOBAL AIRCRAFT DATABASE (DB) 已迁移至外部文件 飞机.js
 
 const SIZE_LABELS = {A:'A-Mini',B:'B-Small',C:'C-Medium',D:'D-Large',E:'E-Heavy',F:'F-Super',G:'G-Mega'};
@@ -6492,13 +7098,14 @@ function showView(name, el) {
     n.classList.toggle('active', n.dataset.tab === name);
   });
   const moreBtn = document.getElementById('bottom-nav-more');
-  if (moreBtn) moreBtn.classList.toggle('active', ['routemap','countries','profitchart','roi','timeline','routes','logic'].includes(name));
+  if (moreBtn) moreBtn.classList.toggle('active', ['routemap','countries','profitchart','roi','timeline','routes','logic','maintenance'].includes(name));
   currentViewName = name;
   if (name === 'analytics') renderAnalytics();
   if (name === 'profitchart') renderProfitCurve();
   if (name === 'timeline') renderTimeline();
   if (name === 'fleet') renderFleet();
   if (name === 'roi') renderRoi();
+  if (name === 'maintenance') renderMaintenance();
   if (name === 'add' && !editingId) clearForm();
   if (name === 'wollars') {
     loadWollars();
@@ -6519,11 +7126,11 @@ function showView(name, el) {
 
 function syncFilters() {
   const apts = [...new Set(fleet.map(a=>a.base).filter(Boolean))].sort();
-  ['fa-airport','ff-airport','pc-airport'].forEach(id => {
-    const s = document.getElementById(id); 
+  ['fa-airport','ff-airport','pc-airport','mf-airport'].forEach(id => {
+    const s = document.getElementById(id);
     if(!s) return;
     const prevVal = s.value;
-    s.innerHTML = '<option value="">All Bases</option>' + apts.map(a=>`<option value="${a}">${a}</option>`).join('');
+    s.innerHTML = '<option value="">全部驻扎基地</option>' + apts.map(a=>`<option value="${a}">${a}</option>`).join('');
     if (prevVal && apts.includes(prevVal)) s.value = prevVal;
   });
   
