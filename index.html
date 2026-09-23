@@ -3031,7 +3031,7 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * 核心算法：基于飞行总里程反推当前等级、点数剩余，统计已修次数/花费，并预测未来检修节点
+ * 核心算法：全自动升级感知，无需手动确认升级，修复临界点抢跑
  */
 function calcPlaneMaintenance(a) {
   const maint = parseFloat(a.maint) || 0;
@@ -3067,7 +3067,7 @@ function calcPlaneMaintenance(a) {
   // 1. 推算已完成总趟数
   const totalTrips = Math.floor(totalDist / roundTripDist);
 
-  // 2. 模拟历史步进过程，并精确统计已完成的小修/大修次数
+  // 2. 模拟历史步进：只有真正飞入了下一阶段，才扣减并结算升级保养
   let pSmall = 100;
   let pLarge = 400;
   let stage = 1;
@@ -3083,22 +3083,31 @@ function calcPlaneMaintenance(a) {
     const K = Math.min(stage, 10);
     const need = K * maint;
 
-    // 升级关口检查：不足则叠加保养点数 (+100 / +400)，两者独立计数
-    if (pSmall < need) {
-      pSmall += 100;
-      smallChecksDone++;
-    }
-    if (pLarge < need) {
-      pLarge += 400;
-      largeChecksDone++;
-    }
+    // 检查进入此阶段是否需要检修
+    const willNeedSmall = pSmall < need;
+    const willNeedLarge = pLarge < need;
 
-    if (totalTrips >= tripsAccum + K) {
+    if (totalTrips > tripsAccum + K) {
+      // 已经飞越此等级，说明当时肯定已在游戏里点击升级保养过
+      if (willNeedSmall) { pSmall += 100; smallChecksDone++; }
+      if (willNeedLarge) { pLarge += 400; largeChecksDone++; }
+
       pSmall -= need;
       pLarge -= need;
       tripsAccum += K;
       stage++;
+    } else if (totalTrips === tripsAccum + K) {
+      // 【全自动关键点】：刚好飞完该等级的最后一趟（如 9/9 或 10/10 落地）
+      // 飞机停在停机坪等待签约，尚未开启下一阶段，因此绝不提前扣钱加点
+      currentLevel = Math.min(stage, 10);
+      currentProgress = K;
+      currentCap = K;
+      break;
     } else {
+      // 处于本等级正常飞行过程中（如 8/10）
+      if (willNeedSmall) { pSmall += 100; smallChecksDone++; }
+      if (willNeedLarge) { pLarge += 400; largeChecksDone++; }
+
       const doneInStage = totalTrips - tripsAccum;
       pSmall -= doneInStage * maint;
       pLarge -= doneInStage * maint;
@@ -3109,35 +3118,32 @@ function calcPlaneMaintenance(a) {
     }
   }
 
-  // 3. 支持用户手动校准当前点数（如果有手动登记过校准，以真实点数为准）
+  // 3. 读取用户手动校准的真实点数（用于对齐那部分在游戏里提前保养过的飞机）
   if (a.calibSmall !== undefined && a.calibSmall !== null && a.calibSmall !== '') {
     pSmall = parseFloat(a.calibSmall);
   }
   if (a.calibLarge !== undefined && a.calibLarge !== null && a.calibLarge !== '') {
     pLarge = parseFloat(a.calibLarge);
   }
-  if (a.extraSmallChecks) smallChecksDone += parseInt(a.extraSmallChecks) || 0;
-  if (a.extraLargeChecks) largeChecksDone += parseInt(a.extraLargeChecks) || 0;
 
   const totalSpentDone = (smallChecksDone * smallCost) + (largeChecksDone * largeCost);
 
-  // 4. 前瞻预测：从当前断面继续向后独立推演，计算下一次小修与大修的剩余趟数
+  // 4. 前瞻预测：计算距离下一次大小修还剩几趟
   let simSmall = pSmall;
   let simLarge = pLarge;
-  let simStage = stage;
-  let futureTrips = 0;
+  let simStage = (currentProgress === currentCap) ? currentLevel + 1 : currentLevel;
+  let futureTrips = (currentProgress === currentCap) ? 0 : (currentCap - currentProgress);
 
   let tripsToSmall = null;
   let tripsToLarge = null;
   let smallTargetLv = null;
   let largeTargetLv = null;
 
-  // 先飞完当前等级未完成的趟数
-  const remInStage = currentCap - currentProgress;
-  simSmall -= remInStage * maint;
-  simLarge -= remInStage * maint;
-  futureTrips += remInStage;
-  simStage++;
+  if (currentProgress < currentCap) {
+    const remInStage = currentCap - currentProgress;
+    simSmall -= remInStage * maint;
+    simLarge -= remInStage * maint;
+  }
 
   for (let s = simStage; s < simStage + 120; s++) {
     const K = Math.min(s, 10);
@@ -3154,7 +3160,6 @@ function calcPlaneMaintenance(a) {
 
     if (tripsToSmall !== null && tripsToLarge !== null) break;
 
-    // 大小修完全独立触发叠加
     if (simSmall < need) simSmall += 100;
     if (simLarge < need) simLarge += 400;
 
@@ -3163,10 +3168,10 @@ function calcPlaneMaintenance(a) {
     futureTrips += K;
   }
 
-  // 紧迫度评级
+  // 紧迫度评级：如果正好在待升级关口且点数不足，直接标红提醒待升级
   let status = 'safe';
   const minTrips = Math.min(tripsToSmall ?? 999, tripsToLarge ?? 999);
-  if (minTrips <= 3) status = 'urgent';
+  if (minTrips === 0 || minTrips <= 3) status = 'urgent';
   else if (minTrips <= 8) status = 'warning';
 
   return {
@@ -3453,36 +3458,42 @@ function renderMaintenance() {
           </div>
         </td>
 
-        <!-- 小维修点数 (含已小修次数标记) -->
+        <!-- 小维修点数 (含已小修次数) -->
         <td>
-          <div style="font-family:var(--mono); font-weight:700; font-size:13px; color:${m.pSmall <= 20 ? 'var(--red)' : (m.pSmall <= 40 ? 'var(--amber)' : 'var(--text1)')};">
-            ${m.pSmall}
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-family:var(--mono); font-weight:700; font-size:13.5px; color:${m.pSmall <= 20 ? 'var(--red)' : (m.pSmall <= 40 ? 'var(--amber)' : 'var(--text1)')};">
+              ${m.pSmall}
+            </span>
+            ${item.calibSmall ? '<span style="font-size:9.5px; padding:1px 4px; border-radius:3px; background:var(--cyan-glow); color:var(--cyan);" title="已手动校准点数">已校准</span>' : ''}
           </div>
           <div style="font-size:10.5px; color:var(--cyan); font-family:var(--mono); margin-top:2px;">
-            <i class="fa-solid fa-check-double"></i> 已做 <strong>${m.smallChecksDone}</strong> 次小修
+            <i class="fa-solid fa-check"></i> 已小修 <strong>${m.smallChecksDone}</strong> 次
           </div>
           <div style="font-size:10px; color:var(--text3); font-family:var(--mono);">
-            单次 A检: ${formatLargeNum(m.smallCost)} ${W_ICON}
+            A检单次: ${formatLargeNum(m.smallCost)}${W_ICON}
           </div>
         </td>
 
-        <!-- 大维修点数 (含已大修次数标记) -->
+        <!-- 大维修点数 (含已大修次数) -->
         <td>
-          <div style="font-family:var(--mono); font-weight:700; font-size:13px; color:${m.pLarge <= 50 ? 'var(--red)' : (m.pLarge <= 100 ? 'var(--amber)' : 'var(--text1)')};">
-            ${m.pLarge}
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-family:var(--mono); font-weight:700; font-size:13.5px; color:${m.pLarge <= 50 ? 'var(--red)' : (m.pLarge <= 100 ? 'var(--amber)' : 'var(--text1)')};">
+              ${m.pLarge}
+            </span>
+            ${item.calibLarge ? '<span style="font-size:9.5px; padding:1px 4px; border-radius:3px; background:var(--purple-glow); color:var(--purple);" title="已手动校准点数">已校准</span>' : ''}
           </div>
           <div style="font-size:10.5px; color:var(--purple); font-family:var(--mono); margin-top:2px;">
-            <i class="fa-solid fa-shield-heart"></i> 已做 <strong>${m.largeChecksDone}</strong> 次大修
+            <i class="fa-solid fa-shield-heart"></i> 已大修 <strong>${m.largeChecksDone}</strong> 次
           </div>
           <div style="font-size:10px; color:var(--text3); font-family:var(--mono);">
-            单次 C/D检: ${formatLargeNum(m.largeCost)} ${W_ICON}
+            C/D检单次: ${formatLargeNum(m.largeCost)}${W_ICON}
           </div>
         </td>
 
         <!-- 下一次小修预测 -->
         <td>
           <div style="font-family:var(--mono); font-weight:700; font-size:12.5px; color:${m.tripsToSmall <= 3 ? 'var(--red)' : 'var(--text1)'};">
-            ${m.tripsToSmall === 0 ? '<span style="color:var(--red);">即刻进厂</span>' : `剩 <strong>${m.tripsToSmall}</strong> 趟`}
+            ${m.tripsToSmall === 0 ? '<span style="color:var(--red);"><i class="fa-solid fa-triangle-exclamation"></i> 即刻进厂</span>' : `剩 <strong>${m.tripsToSmall}</strong> 趟`}
           </div>
           <div style="font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:2px;">
             预计在 Lv.${m.smallTargetLv || '—'} 检修
@@ -3492,7 +3503,7 @@ function renderMaintenance() {
         <!-- 下一次大修预测 -->
         <td>
           <div style="font-family:var(--mono); font-weight:700; font-size:12.5px; color:${m.tripsToLarge <= 5 ? 'var(--red)' : 'var(--text1)'};">
-            ${m.tripsToLarge === 0 ? '<span style="color:var(--red);">即刻进厂</span>' : `剩 <strong>${m.tripsToLarge}</strong> 趟`}
+            ${m.tripsToLarge === 0 ? '<span style="color:var(--red);"><i class="fa-solid fa-triangle-exclamation"></i> 即刻进厂</span>' : `剩 <strong>${m.tripsToLarge}</strong> 趟`}
           </div>
           <div style="font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:2px;">
             预计在 Lv.${m.largeTargetLv || '—'} 检修
@@ -3502,12 +3513,15 @@ function renderMaintenance() {
         <!-- 健康状态 -->
         <td>${statusBadge}</td>
 
-        <!-- 点数校准 / 快速登记 -->
+        <!-- 点数校准 / 登记快捷操作 -->
         <td style="white-space:nowrap;">
-          <button class="btn btn-ghost" onclick="quickRegisterMaint('${item.id}', 'small')" style="padding:3px 7px; font-size:10.5px; margin-right:4px;" title="刚刚在游戏里做了一次小修 (+100 点)">
+          <button class="btn btn-ghost" onclick="quickRegisterMaint('${item.id}', 'small')" style="padding:4px 8px; font-size:11px; margin-right:4px;" title="刚刚在游戏里做了一次小修 (+100 点)">
             +100 小修
           </button>
-          <button class="btn btn-ghost" onclick="openCalibrateMaintModal('${item.id}')" style="padding:3px 7px; font-size:10.5px;" title="手动录入游戏内的真实剩余点数">
+          <button class="btn btn-ghost" onclick="quickRegisterMaint('${item.id}', 'large')" style="padding:4px 8px; font-size:11px; margin-right:4px;" title="刚刚在游戏里做了一次大修 (+400 点)">
+            +400 大修
+          </button>
+          <button class="btn btn-ghost" onclick="openCalibrateMaintModal('${item.id}')" style="padding:4px 8px; font-size:11px;" title="手动录入游戏内的真实剩余点数">
             <i class="fa-solid fa-sliders"></i> 校准
           </button>
         </td>
@@ -3517,7 +3531,7 @@ function renderMaintenance() {
 }
 
 /**
- * 快捷登记：用户在游戏里刚点击了保养，一键为飞机加点
+ * 快捷登记：游戏里刚修完，一键增加点数并记录已修次数
  */
 function quickRegisterMaint(acId, type) {
   const ac = fleet.find(a => a.id === acId);
@@ -3525,15 +3539,13 @@ function quickRegisterMaint(acId, type) {
 
   const currentInfo = calcPlaneMaintenance(ac);
   if (type === 'small') {
-    // 小修点数 + 100，并记录额外小修次数
     ac.calibSmall = Math.round((currentInfo.pSmall + 100) * 100) / 100;
     ac.extraSmallChecks = (parseInt(ac.extraSmallChecks) || 0) + 1;
-    toast(`${ac.reg} 已成功登记小修 (+100 点)，当前小修点数：${ac.calibSmall}`);
+    toast(`${ac.reg} 已登记完成小修 (+100 点)，当前小修点数：${ac.calibSmall}`);
   } else if (type === 'large') {
-    // 大修点数 + 400，并记录额外大修次数
     ac.calibLarge = Math.round((currentInfo.pLarge + 400) * 100) / 100;
     ac.extraLargeChecks = (parseInt(ac.extraLargeChecks) || 0) + 1;
-    toast(`${ac.reg} 已成功登记大修 (+400 点)，当前大修点数：${ac.calibLarge}`);
+    toast(`${ac.reg} 已登记完成大修 (+400 点)，当前大修点数：${ac.calibLarge}`);
   }
 
   persistFleet();
@@ -3541,28 +3553,36 @@ function quickRegisterMaint(acId, type) {
 }
 
 /**
- * 精准校准：弹出窗口，直接填入游戏截图中的真实剩余点数
+ * 精准校准：弹出窗口直接填入游戏真实数值（如截图中的 183.06 或 167.36）
  */
 function openCalibrateMaintModal(acId) {
   const ac = fleet.find(a => a.id === acId);
   if (!ac) return;
   const cur = calcPlaneMaintenance(ac);
 
-  const inputSmall = prompt(`【${ac.reg}】校准小维修剩余点数：\n（当前推算: ${cur.pSmall}，若游戏内如截图显示 170.6，可直接输入 170.6）`, cur.pSmall);
-  if (inputSmall === null) return; // 用户取消
+  const inputSmall = prompt(`【${ac.reg}】校准小型检查剩余点数：\n（当前显示: ${cur.pSmall}，游戏内如显示 183.06 可直接输入 183.06；留空确认可恢复自动推算）`, cur.pSmall);
+  if (inputSmall === null) return;
 
-  const inputLarge = prompt(`【${ac.reg}】校准大维修剩余点数：\n（当前推算: ${cur.pLarge}，若游戏内如截图显示 70.6，可直接输入 70.6）`, cur.pLarge);
+  const inputLarge = prompt(`【${ac.reg}】校准大型检查剩余点数：\n（当前显示: ${cur.pLarge}，游戏内如显示 83.06 可直接输入 83.06；留空确认可恢复自动推算）`, cur.pLarge);
   if (inputLarge === null) return;
 
-  const valSmall = parseFloat(inputSmall);
-  const valLarge = parseFloat(inputLarge);
+  if (inputSmall.trim() === '') {
+    delete ac.calibSmall;
+  } else {
+    const valSmall = parseFloat(inputSmall);
+    if (!isNaN(valSmall)) ac.calibSmall = valSmall;
+  }
 
-  if (!isNaN(valSmall)) ac.calibSmall = valSmall;
-  if (!isNaN(valLarge)) ac.calibLarge = valLarge;
+  if (inputLarge.trim() === '') {
+    delete ac.calibLarge;
+  } else {
+    const valLarge = parseFloat(inputLarge);
+    if (!isNaN(valLarge)) ac.calibLarge = valLarge;
+  }
 
   persistFleet();
   renderMaintenance();
-  toast(`${ac.reg} 维保点数已成功校准！`);
+  toast(`${ac.reg} 维保点数已成功校准同步！`);
 }
 
 // GLOBAL AIRCRAFT DATABASE (DB) 已迁移至外部文件 飞机.js
