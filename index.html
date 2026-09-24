@@ -3204,13 +3204,12 @@ html.strip-theme #woa-custom-tooltip { background: rgba(245, 239, 227, 0.97); }
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * 依据官方 400 MP 维保循环图重构的维保推算引擎
- * 循环规则：
- * 1. 周期 400 MP，包含 3 次小修与 1 次大修
- * 2. 消耗 100 MP -> 第 1 次小修 (+100 MP)
- * 3. 消耗 200 MP -> 第 2 次小修 (+100 MP)
- * 4. 消耗 300 MP -> 第 3 次小修 (+200 MP)
- * 5. 消耗 400 MP -> 大修 (+400 MP)，小修不维护，闭环复原为 (小:100, 大:400)
+ * 维保监控引擎（阶段门槛准入制 Stage-Gate Check）
+ * 核心机制：
+ * 1. 周期 400 MP，包含 3 次小修(+100, +100, +200)与 1 次大修(+400)
+ * 2. 阶段门槛：在开启每个阶段 (如 1/1, ..., 9/9, 10/10 落地) 前，
+ *    必须拥有足够完成下一阶段全部飞行次数的维保点数 (K_next * maint)，
+ *    若不足以跑完整个下一阶段，必须在停机坪【即刻进厂】检修！
  */
 function calcPlaneMaintenance(a) {
   const maint = parseFloat(a.maint) || 0;
@@ -3246,7 +3245,13 @@ function calcPlaneMaintenance(a) {
   // 1. 实际已执飞总趟数
   const totalTrips = Math.floor(totalDist / roundTripDist);
 
-  // 2. 解耦计算：合同升级进度 (Lv.1~Lv.10 阶梯)
+  // 2. 模拟真实阶段进阶过程 (阶段门槛检查)
+  let pSmall = 100;
+  let pLarge = 400;
+  let cycleSmallChecks = 0; // 当前 400 MP 周期内已完成的小修次数 (0, 1, 2)
+  let smallChecksDone = 0;
+  let largeChecksDone = 0;
+
   let stage = 1;
   let tripsAccum = 0;
   let currentLevel = 1;
@@ -3255,9 +3260,32 @@ function calcPlaneMaintenance(a) {
 
   while (true) {
     const K = Math.min(stage, 10);
+    const need = K * maint;
+
+    // 阶段启航门槛检查：若当前点数不足以飞完本阶段整轮，起飞前必须在停机坪完成检修
+    if (pSmall < need) {
+      if (cycleSmallChecks < 2) {
+        pSmall += 100;
+        cycleSmallChecks++;
+      } else {
+        pSmall += 200; // 官方逻辑：周期内第 3 次小修 +200 MP
+        cycleSmallChecks = 0;
+      }
+      smallChecksDone++;
+    }
+
+    if (pLarge < need) {
+      pLarge += 400;
+      largeChecksDone++;
+    }
+
     if (totalTrips >= tripsAccum + K) {
+      pSmall -= need;
+      pLarge -= need;
       tripsAccum += K;
+
       if (totalTrips === tripsAccum) {
+        // 正好完成本阶段全部飞行落地 (如 9/9 落地 或 10/10 落地)
         currentLevel = Math.min(stage, 10);
         currentProgress = K;
         currentCap = K;
@@ -3265,61 +3293,18 @@ function calcPlaneMaintenance(a) {
       }
       stage++;
     } else {
+      // 处于本阶段内部未飞完状态 (如 1/10, 7/10)
+      const doneInStage = totalTrips - tripsAccum;
+      pSmall -= doneInStage * maint;
+      pLarge -= doneInStage * maint;
       currentLevel = Math.min(stage, 10);
-      currentProgress = totalTrips - tripsAccum;
+      currentProgress = doneInStage;
       currentCap = K;
       break;
     }
   }
 
-  // 3. 严格按照官方状态机模拟已执飞的维保历史
-  let pSmall = 100;
-  let pLarge = 400;
-  let cycleSmallChecks = 0; // 当前周期内已完成的小修次数 (0, 1, 2)
-  let smallChecksDone = 0;
-  let largeChecksDone = 0;
-
-  for (let t = 0; t < totalTrips; t++) {
-    // 若剩余点数不足支撑下一次执飞，则在起飞前触发维护
-    if (pSmall < maint) {
-      if (cycleSmallChecks < 2) {
-        pSmall += 100;
-        cycleSmallChecks++;
-      } else {
-        pSmall += 200; // 官方逻辑：第 3 次小修 +200 MP
-        cycleSmallChecks = 0;
-      }
-      smallChecksDone++;
-    }
-
-    if (pLarge < maint) {
-      pLarge += 400;
-      largeChecksDone++;
-    }
-
-    // 执飞消耗
-    pSmall -= maint;
-    pLarge -= maint;
-  }
-
-  // 【核心优化】：如果飞机当前落地后剩余点数不足以飞下一趟（如 1.92 < 6.48），
-  // 说明在停机坪准备执飞下一趟前已自动/必须完成当前检修，与游戏内维护后的面板数值完全对齐
-  if (pSmall < maint) {
-    if (cycleSmallChecks < 2) {
-      pSmall += 100;
-      cycleSmallChecks++;
-    } else {
-      pSmall += 200; // 对应本架飞机的第 3 次小修：1.92 + 200 = 201.92
-      cycleSmallChecks = 0;
-    }
-    smallChecksDone++;
-  }
-  if (pLarge < maint) {
-    pLarge += 400;
-    largeChecksDone++;
-  }
-
-  // 4. 读取用户手动校准的点数（如有手动录入优先采用）
+  // 3. 读取用户手动校准的点数（如有手动录入优先采用）
   let isCalibrated = false;
   if (a.calibSmall !== undefined && a.calibSmall !== null && a.calibSmall !== '') {
     pSmall = parseFloat(a.calibSmall);
@@ -3330,20 +3315,16 @@ function calcPlaneMaintenance(a) {
     isCalibrated = true;
   }
 
-  // 若存在手动校准，通过 (pSmall, pLarge) 的差值特征反推当前所处的周期阶段
+  // 若有手动校准，通过大修剩余点数精确反推当前所处的 400 MP 循环阶段
   if (isCalibrated) {
-    if (pSmall > pLarge) {
-      // 处于第 4 阶段（已完成第 3 次小修，小修余量大于大修余量）
-      cycleSmallChecks = 0;
+    if (pLarge > 300) {
+      cycleSmallChecks = 0; // 第 1 阶段：尚未做第 1 次小修
     } else if (pLarge > 200) {
-      // 处于第 1 阶段（尚未做第 1 次小修）
-      cycleSmallChecks = 0;
+      cycleSmallChecks = 1; // 第 2 阶段：已做第 1 次小修
     } else if (pLarge > 100) {
-      // 处于第 2 阶段（已做第 1 次小修）
-      cycleSmallChecks = 1;
+      cycleSmallChecks = 2; // 第 3 阶段：已做第 2 次小修，下一次小修 +200 MP
     } else {
-      // 处于第 3 阶段（已做第 2 次小修，下一次小修将 +200）
-      cycleSmallChecks = 2;
+      cycleSmallChecks = 0; // 第 4 阶段：已做第 3 次小修，等待大修
     }
   }
 
@@ -3352,25 +3333,10 @@ function calcPlaneMaintenance(a) {
 
   const totalSpentDone = (smallChecksDone * smallCost) + (largeChecksDone * largeCost);
 
-  // 辅助函数：根据累计趟数获取所处的等级节点文案
-  function getStageLevelForTrip(targetTrip) {
-    let s = 1;
-    let acc = 0;
-    while (true) {
-      const K = Math.min(s, 10);
-      acc += K;
-      if (targetTrip <= acc) {
-        return Math.min(s, 10);
-      }
-      s++;
-    }
-  }
-
-  // 5. 前瞻预测：推算距离下一次小修和大修的剩余趟数与检修节点
+  // 4. 前瞻预测：以阶段门槛 (Stage-Gate) 判定未来检修节点与剩余趟数
   let simSmall = pSmall;
   let simLarge = pLarge;
   let simCycleSmall = cycleSmallChecks;
-  let simTrips = totalTrips;
   let futureTrips = 0;
 
   let tripsToSmall = null;
@@ -3378,23 +3344,47 @@ function calcPlaneMaintenance(a) {
   let smallTargetLv = null;
   let largeTargetLv = null;
 
-  // 最多向前推算 600 趟以覆盖多次大修周期
-  for (let step = 0; step < 600; step++) {
-    const needSmall = simSmall < maint;
-    const needLarge = simLarge < maint;
+  // 4.1 若飞机当前处于某阶段途中 (currentProgress < currentCap)，先检查是否支撑飞完本阶段剩余趟数
+  if (currentProgress < currentCap) {
+    const remInStage = currentCap - currentProgress;
+    const remNeed = remInStage * maint;
+
+    if (simSmall < remNeed) {
+      tripsToSmall = Math.max(0, Math.floor(simSmall / maint));
+      smallTargetLv = currentLevel;
+    }
+    if (simLarge < remNeed) {
+      tripsToLarge = Math.max(0, Math.floor(simLarge / maint));
+      largeTargetLv = currentLevel;
+    }
+
+    simSmall -= remNeed;
+    simLarge -= remNeed;
+    futureTrips += remInStage;
+  }
+
+  // 4.2 此时飞机处于落地状态（如 9/9 落地或 10/10 落地），逐个阶段前瞻下一轮是否满足整段需求
+  let simStage = (currentLevel >= 10) ? 10 : (currentLevel + 1);
+
+  for (let step = 0; step < 120; step++) {
+    const nextK = Math.min(simStage, 10);
+    const nextNeed = nextK * maint;
+
+    const needSmall = simSmall < nextNeed;
+    const needLarge = simLarge < nextNeed;
 
     if (needSmall && tripsToSmall === null) {
       tripsToSmall = futureTrips;
-      smallTargetLv = getStageLevelForTrip(simTrips);
+      smallTargetLv = simStage;
     }
     if (needLarge && tripsToLarge === null) {
       tripsToLarge = futureTrips;
-      largeTargetLv = getStageLevelForTrip(simTrips);
+      largeTargetLv = simStage;
     }
 
     if (tripsToSmall !== null && tripsToLarge !== null) break;
 
-    // 模拟维护充值
+    // 模拟检修补点
     if (needSmall) {
       if (simCycleSmall < 2) {
         simSmall += 100;
@@ -3408,10 +3398,10 @@ function calcPlaneMaintenance(a) {
       simLarge += 400;
     }
 
-    simSmall -= maint;
-    simLarge -= maint;
-    futureTrips++;
-    simTrips++;
+    simSmall -= nextNeed;
+    simLarge -= nextNeed;
+    futureTrips += nextK;
+    if (simStage < 10) simStage++;
   }
 
   let status = 'safe';
