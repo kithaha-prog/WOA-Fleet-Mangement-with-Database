@@ -3286,8 +3286,7 @@ function calcPlaneMaintenance(a) {
         pSmall += 100;
         cycleSmallChecks++;
       } else {
-        // 第 3 次小修：官方逻辑 +200 MP
-        pSmall += 200;
+        pSmall += 200; // 官方逻辑：第 3 次小修 +200 MP
         cycleSmallChecks = 0;
       }
       smallChecksDone++;
@@ -3301,6 +3300,23 @@ function calcPlaneMaintenance(a) {
     // 执飞消耗
     pSmall -= maint;
     pLarge -= maint;
+  }
+
+  // 【核心优化】：如果飞机当前落地后剩余点数不足以飞下一趟（如 1.92 < 6.48），
+  // 说明在停机坪准备执飞下一趟前已自动/必须完成当前检修，与游戏内维护后的面板数值完全对齐
+  if (pSmall < maint) {
+    if (cycleSmallChecks < 2) {
+      pSmall += 100;
+      cycleSmallChecks++;
+    } else {
+      pSmall += 200; // 对应本架飞机的第 3 次小修：1.92 + 200 = 201.92
+      cycleSmallChecks = 0;
+    }
+    smallChecksDone++;
+  }
+  if (pLarge < maint) {
+    pLarge += 400;
+    largeChecksDone++;
   }
 
   // 4. 读取用户手动校准的点数（如有手动录入优先采用）
